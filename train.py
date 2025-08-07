@@ -6,14 +6,14 @@ from collections import defaultdict
 def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
-    max_episodes = 10000        # 总共训练的回合数
-    max_timesteps = 300         # 每个回合的最大步数
+    max_episodes = 10        # 总共训练的回合数
+    max_timesteps = 10000         # 每个回合的最大步数
     update_timestep = 2000      # 每隔多少步更新一次策略
     
     # PPO 相关超参数
     state_dim = 6               # 状态维度，根据 AgentObservation 定义
     action_dim = 4              # 动作维度，根据 Action 枚举 (忽略 UNSPECIFIED)
-    lr = 0.002                  # 学习率
+    lr = 0.0001                  # 学习率
     gamma = 0.99                # 折扣因子
     K_epochs = 4                # 更新策略的 epoch 数
     eps_clip = 0.2              # PPO 的裁剪范围
