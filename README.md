@@ -16,7 +16,7 @@
 ---
 
 ## 使用
-请根据requirements.txt安装相关依赖，推荐使用conda虚拟环境
+请根据requirements.txt安装相关依赖，推荐使用conda虚拟环境（python3.10）
 ```bash
 #安装依赖
 pip install -r requirments.txt
