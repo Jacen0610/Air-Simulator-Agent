@@ -48,11 +48,11 @@ class NoisyLinear(nn.Module):
         return x.sign().mul(x.abs().sqrt())
 
     def forward(self, x):
+        # 如果是训练模式，使用带噪声的权重和偏置
         if self.training:
-            self.reset_noise()
             weight = self.weight_mu + self.weight_sigma * self.weight_epsilon
             bias = self.bias_mu + self.bias_sigma * self.bias_epsilon
-        else:
+        else: # 如果是评估模式，使用确定的权重和偏置
             weight = self.weight_mu
             bias = self.bias_mu
         
@@ -92,6 +92,12 @@ class DuelingQNetwork(nn.Module):
         # 组合 V(s) 和 A(s, a)
         q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
         return q_values
+    
+    def reset_noise(self):
+        """重置网络中所有 NoisyLinear 层的噪声"""
+        for module in self.modules():
+            if isinstance(module, NoisyLinear):
+                module.reset_noise()
 
 # 经验回放缓冲区 (与 DQN 相同)
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
@@ -145,6 +151,10 @@ class RainbowDQNAgent:
     def update(self):
         if len(self.memory) < self.batch_size:
             return
+
+        # 在每次更新开始时，为网络重置一次噪声
+        self.policy_net.reset_noise()
+        self.target_net.reset_noise()
 
         transitions = self.memory.sample(self.batch_size)
         batch = Transition(*zip(*transitions))
