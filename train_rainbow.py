@@ -19,6 +19,7 @@ def main():
     tau = 0.005                 # 目标网络软更新系数
     noisy_std = 0.1             # Noisy Nets 的初始噪声标准差 (关键参数)
     learning_starts = 1000      # 新增：在开始学习前，先收集这么多步的经验
+    update_every_steps = 1200   # 新增：每隔多少步更新一次网络
 
     # 注意：Rainbow DQN 使用 Noisy Nets 进行探索，不再需要 Epsilon-Greedy 参数
 
@@ -71,8 +72,8 @@ def main():
                 
                 agents[agent_id].store_transition(obs, action, next_obs, reward, done)
                 
-                # 只有在收集到足够多的经验后才开始学习
-                if total_timesteps > learning_starts:
+                # 只有在收集到足够多的经验后才开始学习，并且达到更新频率
+                if total_timesteps > learning_starts and total_timesteps % update_every_steps == 0:
                     agents[agent_id].update()
 
                 episode_rewards[agent_id] += reward
