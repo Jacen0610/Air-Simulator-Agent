@@ -64,7 +64,7 @@ class DuelingQNetwork(nn.Module):
     Dueling Q-Network 结构。
     它将 Q 值分解为 V(s) (状态价值) 和 A(s, a) (动作优势)。
     """
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, state_dim, action_dim, noisy_std):
         super(DuelingQNetwork, self).__init__()
         
         # 使用 NoisyLinear 替代 nn.Linear
@@ -74,15 +74,15 @@ class DuelingQNetwork(nn.Module):
         )
 
         self.advantage_layer = nn.Sequential(
-            NoisyLinear(128, 128),
+            NoisyLinear(128, 128, std_init=noisy_std),
             nn.ReLU(),
-            NoisyLinear(128, action_dim)
+            NoisyLinear(128, action_dim, std_init=noisy_std)
         )
 
         self.value_layer = nn.Sequential(
-            NoisyLinear(128, 128),
+            NoisyLinear(128, 128, std_init=noisy_std),
             nn.ReLU(),
-            NoisyLinear(128, 1)
+            NoisyLinear(128, 1, std_init=noisy_std)
         )
 
     def forward(self, x):
@@ -117,15 +117,15 @@ class ReplayBuffer:
 
 # --- 3. Rainbow DQN 智能体 ---
 class RainbowDQNAgent:
-    def __init__(self, state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau):
+    def __init__(self, state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std=0.1):
         self.action_dim = action_dim
         self.gamma = gamma
         self.batch_size = batch_size
         self.tau = tau
 
         # 使用 DuelingQNetwork
-        self.policy_net = DuelingQNetwork(state_dim, action_dim)
-        self.target_net = DuelingQNetwork(state_dim, action_dim)
+        self.policy_net = DuelingQNetwork(state_dim, action_dim, noisy_std)
+        self.target_net = DuelingQNetwork(state_dim, action_dim, noisy_std)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 

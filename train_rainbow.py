@@ -6,7 +6,7 @@ import numpy as np
 def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
-    max_episodes = 15        # 总共训练的回合数
+    max_episodes = 500       # 总共训练的回合数 (必须增加以进行公平比较)
     max_timesteps = 10000      # 每个回合的最大步数
     
     # Rainbow DQN 相关超参数
@@ -17,6 +17,8 @@ def main():
     buffer_size = 10000         # 经验回放缓冲区大小
     batch_size = 64             # 学习时采样的批量大小
     tau = 0.005                 # 目标网络软更新系数
+    noisy_std = 0.1             # Noisy Nets 的初始噪声标准差 (关键参数)
+    learning_starts = 1000      # 新增：在开始学习前，先收集这么多步的经验
 
     # 注意：Rainbow DQN 使用 Noisy Nets 进行探索，不再需要 Epsilon-Greedy 参数
 
@@ -29,9 +31,12 @@ def main():
     agent_ids = env.agent_ids
 
     # 为每个智能体创建一个 RainbowDQNAgent 实例
-    agents = {agent_id: RainbowDQNAgent(state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau) for agent_id in agent_ids}
+    agents = {agent_id: RainbowDQNAgent(state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std) for
+              agent_id in agent_ids}
 
     print("开始 Rainbow DQN 训练...")
+    
+    total_timesteps = 0 # 新增：全局步数计数器
 
     # 训练循环
     for i_episode in range(1, max_episodes + 1):
@@ -41,6 +46,8 @@ def main():
         episode_rewards = {agent_id: 0 for agent_id in agent_ids}
 
         for t in range(max_timesteps):
+            total_timesteps += 1
+
             # 所有智能体选择动作
             actions_to_send = {}
             actions_taken = {}
@@ -63,7 +70,11 @@ def main():
                 done = dones[agent_id]
                 
                 agents[agent_id].store_transition(obs, action, next_obs, reward, done)
-                agents[agent_id].update()
+                
+                # 只有在收集到足够多的经验后才开始学习
+                if total_timesteps > learning_starts:
+                    agents[agent_id].update()
+
                 episode_rewards[agent_id] += reward
 
             observations = next_observations
@@ -72,8 +83,11 @@ def main():
                 break
         
         avg_reward = np.mean(list(episode_rewards.values()))
-        # 打印信息中也不再有 Epsilon
-        print(f"Episode {i_episode} | 平均奖励: {avg_reward:.2f}")
+        
+        if total_timesteps <= learning_starts:
+            print(f"Episode {i_episode} | 收集经验中... ({total_timesteps}/{learning_starts})")
+        else:
+            print(f"Episode {i_episode} | 平均奖励: {avg_reward:.2f}")
 
 if __name__ == '__main__':
     main()
