@@ -5,6 +5,58 @@ import random
 import math
 from collections import deque, namedtuple
 
+# --- 新增：用于优先经验回放的 SumTree ---
+class SumTree:
+    """
+    SumTree 数据结构，用于高效地根据优先级进行采样。
+    """
+    write = 0
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree = np.zeros(2 * capacity - 1)
+        self.data = np.zeros(capacity, dtype=object)
+        self.n_entries = 0
+
+    def _propagate(self, idx, change):
+        parent = (idx - 1) // 2
+        self.tree[parent] += change
+        if parent != 0:
+            self._propagate(parent, change)
+
+    def _retrieve(self, idx, s):
+        left = 2 * idx + 1
+        right = left + 1
+        if left >= len(self.tree):
+            return idx
+        if s <= self.tree[left]:
+            return self._retrieve(left, s)
+        else:
+            return self._retrieve(right, s - self.tree[left])
+
+    def total(self):
+        return self.tree[0]
+
+    def add(self, p, data):
+        idx = self.write + self.capacity - 1
+        self.data[self.write] = data
+        self.update(idx, p)
+        self.write += 1
+        if self.write >= self.capacity:
+            self.write = 0
+        if self.n_entries < self.capacity:
+            self.n_entries += 1
+
+    def update(self, idx, p):
+        change = p - self.tree[idx]
+        self.tree[idx] = p
+        self._propagate(idx, change)
+
+    def get(self, s):
+        idx = self._retrieve(0, s)
+        dataIdx = idx - self.capacity + 1
+        return (idx, self.tree[idx], self.data[dataIdx])
+
 # --- 1. Noisy Nets 组件 ---
 # 自定义的带噪声的线性层，用于替代 nn.Linear
 class NoisyLinear(nn.Module):
@@ -64,25 +116,25 @@ class DuelingQNetwork(nn.Module):
     Dueling Q-Network 结构。
     它将 Q 值分解为 V(s) (状态价值) 和 A(s, a) (动作优势)。
     """
-    def __init__(self, state_dim, action_dim, noisy_std):
+    def __init__(self, state_dim, action_dim, noisy_std, hidden_dim=128):
         super(DuelingQNetwork, self).__init__()
         
         # 使用 NoisyLinear 替代 nn.Linear
         self.feature_layer = nn.Sequential(
-            nn.Linear(state_dim, 128),
+            nn.Linear(state_dim, hidden_dim),
             nn.ReLU()
         )
 
         self.advantage_layer = nn.Sequential(
-            NoisyLinear(128, 128, std_init=noisy_std),
+            NoisyLinear(hidden_dim, hidden_dim, std_init=noisy_std),
             nn.ReLU(),
-            NoisyLinear(128, action_dim, std_init=noisy_std)
+            NoisyLinear(hidden_dim, action_dim, std_init=noisy_std)
         )
 
         self.value_layer = nn.Sequential(
-            NoisyLinear(128, 128, std_init=noisy_std),
+            NoisyLinear(hidden_dim, hidden_dim, std_init=noisy_std),
             nn.ReLU(),
-            NoisyLinear(128, 1, std_init=noisy_std)
+            NoisyLinear(hidden_dim, 1, std_init=noisy_std)
         )
 
     def forward(self, x):
@@ -102,35 +154,65 @@ class DuelingQNetwork(nn.Module):
 # 经验回放缓冲区 (与 DQN 相同)
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
 
-class ReplayBuffer:
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
+# --- 修改：使用优先经验回放 ---
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, alpha=0.6):
+        self.tree = SumTree(capacity)
+        self.capacity = capacity
+        self.alpha = alpha
+        self.e = 0.01  # 小常数，避免优先级为0
+        self.max_priority = 1.0
 
-    def push(self, *args):
-        self.memory.append(Transition(*args))
+    def push(self, state, action, next_state, reward, done):
+        data = Transition(state, action, next_state, reward, done)
+        self.tree.add(self.max_priority, data)
 
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+    def sample(self, batch_size, beta=0.4):
+        batch = []
+        idxs = []
+        segment = self.tree.total() / batch_size
+        priorities = []
+
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+            s = random.uniform(a, b)
+            (idx, p, data) = self.tree.get(s)
+            priorities.append(p)
+            batch.append(data)
+            idxs.append(idx)
+
+        sampling_probabilities = np.array(priorities) / self.tree.total()
+        is_weight = np.power(self.tree.n_entries * sampling_probabilities, -beta)
+        is_weight /= is_weight.max()
+
+        return batch, idxs, torch.FloatTensor(is_weight)
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        for idx, priority in zip(batch_indices, batch_priorities):
+            p = (priority + self.e) ** self.alpha
+            self.tree.update(idx, p)
+            self.max_priority = max(self.max_priority, p)
 
     def __len__(self):
-        return len(self.memory)
+        return self.tree.n_entries
 
 # --- 3. Rainbow DQN 智能体 ---
 class RainbowDQNAgent:
-    def __init__(self, state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std=0.1):
+    def __init__(self, state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std=0.1, hidden_dim=128, per_alpha=0.6):
         self.action_dim = action_dim
         self.gamma = gamma
         self.batch_size = batch_size
         self.tau = tau
 
         # 使用 DuelingQNetwork
-        self.policy_net = DuelingQNetwork(state_dim, action_dim, noisy_std)
-        self.target_net = DuelingQNetwork(state_dim, action_dim, noisy_std)
+        self.policy_net = DuelingQNetwork(state_dim, action_dim, noisy_std, hidden_dim)
+        self.target_net = DuelingQNetwork(state_dim, action_dim, noisy_std, hidden_dim)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
-        self.memory = ReplayBuffer(buffer_size)
+        self.memory = PrioritizedReplayBuffer(buffer_size, alpha=per_alpha)
         self.loss_fn = nn.SmoothL1Loss()
 
     def select_action(self, state):
@@ -146,9 +228,9 @@ class RainbowDQNAgent:
         action = torch.tensor([action], dtype=torch.long)
         reward = torch.tensor([reward], dtype=torch.float32)
         done = torch.tensor([done], dtype=torch.float32)
-        self.memory.push(state, action, next_state, reward, done)
+        self.memory.push(state, action, next_state, reward, done) # PER push
 
-    def update(self):
+    def update(self, beta):
         if len(self.memory) < self.batch_size:
             return
 
@@ -156,7 +238,7 @@ class RainbowDQNAgent:
         self.policy_net.reset_noise()
         self.target_net.reset_noise()
 
-        transitions = self.memory.sample(self.batch_size)
+        transitions, batch_indices, is_weights = self.memory.sample(self.batch_size, beta)
         batch = Transition(*zip(*transitions))
 
         state_batch = torch.stack(batch.state)
@@ -176,7 +258,14 @@ class RainbowDQNAgent:
         
         expected_state_action_values = (next_state_q_values * self.gamma * (1 - done_batch)) + reward_batch
 
-        loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
+        # 计算 TD-error 用于更新优先级
+        td_errors = (state_action_values - expected_state_action_values.unsqueeze(1)).abs().detach()
+
+        # 更新 PER 优先级
+        self.memory.update_priorities(batch_indices, td_errors.squeeze(1).cpu().numpy())
+
+        # 计算加权的损失
+        loss = (self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1)) * is_weights.unsqueeze(1)).mean()
 
         self.optimizer.zero_grad()
         loss.backward()

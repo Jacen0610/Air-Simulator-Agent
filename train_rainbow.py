@@ -18,10 +18,16 @@ def main():
     buffer_size = 10000         # 经验回放缓冲区大小
     batch_size = 64             # 学习时采样的批量大小
     tau = 0.005                 # 目标网络软更新系数
+    hidden_dim = 128            # 网络的隐藏层维度
     noisy_std = 0.1             # Noisy Nets 的初始噪声标准差 (关键参数)
     # 在开始学习前，先收集1000步的经验。原8000步的设置导致智能体在整个第一回合都不学习。
     learning_starts = 1000
     gradient_steps = 1          # 每次与环境交互后，执行多少次梯度更新。1是标准做法。
+
+    # PER (优先经验回放) 相关超参数
+    per_alpha = 0.6             # 优先级指数 (0: uniform, 1: full priority)
+    per_beta_start = 0.4        # IS(重要性采样)权重指数的初始值
+    per_beta_frames = 100000    # 将 beta 从初始值退火到 1.0 所需的步数
 
     # 模型保存与加载的超参数
     checkpoint_dir = "checkpoints"    # 模型保存的文件夹
@@ -44,7 +50,7 @@ def main():
     agent_ids = env.agent_ids
 
     # 为每个智能体创建一个 RainbowDQNAgent 实例
-    agents = {agent_id: RainbowDQNAgent(state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std) for
+    agents = {agent_id: RainbowDQNAgent(state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std, hidden_dim, per_alpha) for
               agent_id in agent_ids}
 
     # --- 断点续训逻辑 ---
@@ -103,9 +109,12 @@ def main():
                 
                 # 只有在收集到足够多的经验后才开始学习，并且达到更新频率
                 if total_timesteps > learning_starts:
+                    # 计算当前 beta 值 (线性退火)
+                    beta = per_beta_start + total_timesteps * (1.0 - per_beta_start) / per_beta_frames
+                    beta = min(1.0, beta)
                     # 执行 N 次梯度更新，以提高样本利用率
                     for _ in range(gradient_steps):
-                        agents[agent_id].update()
+                        agents[agent_id].update(beta)
 
                 episode_rewards[agent_id] += reward
 
