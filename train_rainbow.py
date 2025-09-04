@@ -18,7 +18,7 @@ def main():
     buffer_size = 10000         # 经验回放缓冲区大小
     batch_size = 64             # 学习时采样的批量大小
     tau = 0.005                 # 目标网络软更新系数
-    hidden_dim = 128            # 网络的隐藏层维度
+    hidden_dim = 32            # 网络的隐藏层维度
     noisy_std = 0.1             # Noisy Nets 的初始噪声标准差 (关键参数)
     # 在开始学习前，先收集1000步的经验。原8000步的设置导致智能体在整个第一回合都不学习。
     learning_starts = 1000

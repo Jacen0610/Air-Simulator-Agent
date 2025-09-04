@@ -214,7 +214,7 @@ class RainbowDQNAgent:
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.memory = PrioritizedReplayBuffer(buffer_size, alpha=per_alpha)
-        self.loss_fn = nn.SmoothL1Loss()
+        self.loss_fn = nn.SmoothL1Loss(reduction='none') # 关键修改：reduction='none' 用于 PER
 
     def select_action(self, state):
         # 使用 Noisy Nets，不再需要 epsilon-greedy
