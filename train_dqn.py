@@ -7,7 +7,7 @@ def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
     max_episodes = 20        # 总共训练的回合数
-    max_timesteps = 10000        # 每个回合的最大步数
+    max_timesteps = 1000000        # 每个回合的最大步数
     
     # DQN 相关超参数
     state_dim = 6               # 状态维度，根据 AgentObservation 定义
@@ -15,7 +15,7 @@ def main():
     action_dim = 3              # 动作维度
     lr = 0.0001                  # 学习率
     gamma = 0.99                # 折扣因子
-    buffer_size = 10000         # 经验回放缓冲区大小
+    buffer_size = 100000        # 经验回放缓冲区大小
     batch_size = 64             # 学习时采样的批量大小
     tau = 0.005                 # 目标网络软更新系数
 

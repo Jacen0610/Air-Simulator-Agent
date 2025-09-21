@@ -30,8 +30,8 @@ def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
     max_episodes = 20        # 总共训练的回合数
-    max_timesteps = 10000      # 每个回合的最大步数
-    update_timestep = 600      # 每隔多少步更新一次网络 (A2C 更新更频繁)
+    max_timesteps = 1000000      # 每个回合的最大步数
+    update_timestep = 1200      # 每隔多少步更新一次网络 (A2C 更新更频繁)
     
     # A2C 相关超参数
     state_dim = 6               # 状态维度

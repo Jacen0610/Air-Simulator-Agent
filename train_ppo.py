@@ -32,15 +32,15 @@ def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
     max_episodes = 20        # 总共训练的回合数
-    max_timesteps = 10000      # 每个回合的最大步数
-    update_timestep = 600    # 每隔多少步更新一次网络
+    max_timesteps = 1000000      # 每个回合的最大步数
+    update_timestep = 1200    # 每隔多少步更新一次网络
     
     # PPO 相关超参数
     state_dim = 6               # 状态维度
     action_dim = 3              # 动作维度
     lr = 0.0003                 # 学习率
     gamma = 0.99                # 折扣因子
-    K_epochs = 4                # 更新策略的 epoch 数
+    K_epochs = 2                # 更新策略的 epoch 数
     eps_clip = 0.2              # PPO 裁剪范围
 
     #############################################
