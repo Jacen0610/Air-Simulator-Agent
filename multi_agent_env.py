@@ -66,7 +66,6 @@ class MultiAgentSimEnv:
         return observations
 
     def step(self, actions):
-        time.sleep(0.05)
         """
         在环境中执行一步。
 

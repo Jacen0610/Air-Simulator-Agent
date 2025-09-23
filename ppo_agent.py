@@ -6,7 +6,7 @@ import numpy as np
 class ActorCritic(nn.Module):
     """
     PPO 的 Actor-Critic 网络。
-    它接收观测并输出动作概率和一个价值估计。
+    它接收观测并输出动作 logits 和一个价值估计。
     """
     def __init__(self, state_dim, action_dim):
         super(ActorCritic, self).__init__()
@@ -17,8 +17,7 @@ class ActorCritic(nn.Module):
             nn.Tanh(),
             nn.Linear(64, 64),
             nn.Tanh(),
-            nn.Linear(64, action_dim),
-            nn.Softmax(dim=-1)
+            nn.Linear(64, action_dim)
         )
 
         # Critic 网络 (价值)
@@ -37,8 +36,8 @@ class ActorCritic(nn.Module):
         """
         根据当前状态选择一个动作。
         """
-        action_probs = self.actor(state)
-        dist = Categorical(action_probs)
+        action_logits = self.actor(state)
+        dist = Categorical(logits=action_logits)
         action = dist.sample()
         action_logprob = dist.log_prob(action)
         return action.item(), action_logprob
@@ -47,8 +46,8 @@ class ActorCritic(nn.Module):
         """
         评估旧状态和动作，用于计算损失。
         """
-        action_probs = self.actor(state)
-        dist = Categorical(action_probs)
+        action_logits = self.actor(state)
+        dist = Categorical(logits=action_logits)
         action_logprobs = dist.log_prob(action)
         dist_entropy = dist.entropy()
         state_value = self.critic(state)
