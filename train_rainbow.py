@@ -8,7 +8,6 @@ def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
     max_episodes = 500       # 总共训练的回合数 (必须增加以进行公平比较)
-    max_timesteps = 1000000      # 每个回合的最大步数
     
     # Rainbow DQN 相关超参数
     state_dim = 6               # 状态维度
@@ -21,7 +20,7 @@ def main():
     hidden_dim = 32            # 网络的隐藏层维度
     noisy_std = 0.1             # Noisy Nets 的初始噪声标准差 (关键参数)
     # 在开始学习前，先收集1000步的经验。原8000步的设置导致智能体在整个第一回合都不学习。
-    learning_starts = 1000
+    learning_starts = 100000
     gradient_steps = 1          # 每次与环境交互后，执行多少次梯度更新。1是标准做法。
 
     # PER (优先经验回放) 相关超参数
@@ -81,7 +80,7 @@ def main():
         
         episode_rewards = {agent_id: 0 for agent_id in agent_ids}
 
-        for t in range(max_timesteps):
+        while True:
             total_timesteps += 1
 
             # 所有智能体选择动作
