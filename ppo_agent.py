@@ -77,18 +77,17 @@ class PPOAgent:
         return action, action_logprob
 
     def update(self, memory):
-        # GAE (Generalized Advantage Estimation) 计算优势
-        rewards = []
+        # GAE (Generalized Advantage Estimation) 计算回报
+        returns = []
         discounted_reward = 0
         for reward, is_terminal in zip(reversed(memory['rewards']), reversed(memory['dones'])):
             if is_terminal:
                 discounted_reward = 0
             discounted_reward = reward + (self.gamma * discounted_reward)
-            rewards.insert(0, discounted_reward)
+            returns.insert(0, discounted_reward)
 
-        # 标准化 rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32)
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
+        # 转换为 tensor
+        returns = torch.tensor(returns, dtype=torch.float32)
 
         # 转换 list 为 tensor
         old_states = torch.squeeze(torch.stack(memory['states'], dim=0)).detach()
@@ -100,16 +99,17 @@ class PPOAgent:
             # 评估旧动作和价值
             logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
 
+            # 计算优势
+            advantages = returns - state_values.detach()
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
             # 计算比率 (pi_theta / pi_theta_old)
             ratios = torch.exp(logprobs - old_logprobs.detach())
-
-            # 计算优势
-            advantages = rewards - state_values.detach()
             
             # 计算 PPO 裁剪损失 (Surrogate Loss)
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
-            loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards) - 0.01 * dist_entropy
+            loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, returns) - 0.01 * dist_entropy
 
             # 梯度下降
             self.optimizer.zero_grad()
