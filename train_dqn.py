@@ -7,7 +7,7 @@ def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
     max_episodes = 20        # 总共训练的回合数
-    max_timesteps = 1000000        # 每个回合的最大步数
+
     
     # DQN 相关超参数
     state_dim = 6               # 状态维度，根据 AgentObservation 定义
@@ -49,7 +49,7 @@ def main():
         
         episode_rewards = {agent_id: 0 for agent_id in agent_ids}
 
-        for t in range(max_timesteps):
+        while True:
             # 所有智能体选择动作
             actions_to_send = {}
             actions_taken = {}

@@ -31,8 +31,8 @@ class PPOMemory:
 def main():
     ################## 超参数 ##################
     grpc_address = "localhost:50051"
-    max_episodes = 20        # 总共训练的回合数
-    update_timestep = 120000    # 每隔多少步更新一次网络
+    max_episodes = 24        # 总共训练的回合数
+    update_timestep = 12000   # 每隔多少步更新一次网络
     
     # PPO 相关超参数
     state_dim = 6               # 状态维度
