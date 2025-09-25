@@ -10,7 +10,7 @@ def main():
     max_episodes = 500       # 总共训练的回合数 (必须增加以进行公平比较)
     
     # Rainbow DQN 相关超参数
-    state_dim = 6               # 状态维度
+    state_dim = 7               # [核心修改] 状态维度现在是 7
     action_dim = 3              # 动作维度
     lr = 0.0001                 # 学习率
     gamma = 0.99                # 折扣因子
@@ -90,8 +90,8 @@ def main():
                 # select_action 不再需要 epsilon
                 action = agents[agent_id].select_action(obs)
                 actions_taken[agent_id] = action
-                # 将网络输出的动作 [0, 1, 2] 映射到环境的动作 [1, 2, 3]
-                actions_to_send[agent_id] = action + 1
+                # [核心修改] 直接使用网络输出的动作 [0, 1, 2]
+                actions_to_send[agent_id] = action
 
             # 在环境中执行动作
             next_observations, rewards, dones, all_done, _ = env.step(actions_to_send)

@@ -34,7 +34,7 @@ def main():
     update_timestep = 1200      # 每隔多少步更新一次网络 (A2C 更新更频繁)
     
     # A2C 相关超参数
-    state_dim = 6               # 状态维度
+    state_dim = 7               # [核心修改] 状态维度现在是 7
     action_dim = 3              # 动作维度
     lr = 0.0002                 # 学习率
     gamma = 0.99                # 折扣因子
@@ -75,8 +75,8 @@ def main():
                 memories[agent_id].states.append(torch.FloatTensor(obs))
                 memories[agent_id].actions.append(torch.tensor(action))
 
-                # 将网络输出的动作 [0, 1, 2] 映射到环境的动作 [1, 2, 3]
-                actions_to_send[agent_id] = action + 1
+                # [核心修改] 直接使用网络输出的动作 [0, 1, 2]
+                actions_to_send[agent_id] = action
 
             # 在环境中执行动作
             next_observations, rewards, dones, all_done, _ = env.step(actions_to_send)

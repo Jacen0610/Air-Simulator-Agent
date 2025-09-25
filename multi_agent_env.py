@@ -35,13 +35,15 @@ class MultiAgentSimEnv:
 
         for agent_id, state in states_proto.items():
             # 将观测数据转换为一个 numpy 向量
+            # [核心修改] 移除 top_message_priority 并使用当前 proto 文件中定义的所有字段
             obs_vec = np.array([
                 float(state.observation.has_message),
-                state.observation.top_message_priority,
                 float(state.observation.primary_channel_busy),
                 float(state.observation.backup_channel_busy),
                 state.observation.pending_acks_count,
                 state.observation.outbound_queue_length,
+                state.observation.top_message_wait_time_seconds,
+                float(state.observation.is_retransmission),
             ], dtype=np.float32)
 
             observations[agent_id] = obs_vec
@@ -66,7 +68,7 @@ class MultiAgentSimEnv:
         return observations
 
     def step(self, actions):
-        time.sleep(0.001)
+        time.sleep(0.005)
         """
         在环境中执行一步。
 
@@ -76,15 +78,9 @@ class MultiAgentSimEnv:
         Returns:
             tuple: (observations, rewards, dones, infos)
         """
+        # [核心修改] 直接传递 action_id，因为它们现在与 proto enum 中的值匹配 (0, 1, 2)
         # 将 Python 字典转换为 Protobuf 的 map
-        step_request = simulator_pb2.StepRequest(
-            actions={
-                agent_id: simulator_pb2.Action.Value(f'ACTION_WAIT') if action_id == 1
-                else simulator_pb2.Action.Value(f'ACTION_SEND_PRIMARY') if action_id == 2
-                else simulator_pb2.Action.Value(f'ACTION_SEND_BACKUP')
-                for agent_id, action_id in actions.items()
-            }
-        )
+        step_request = simulator_pb2.StepRequest(actions=actions)
 
         response = self.stub.Step(step_request)
         observations, rewards, dones = self._parse_states(response.states)
