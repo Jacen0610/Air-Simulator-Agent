@@ -4,60 +4,63 @@ from rainbow_dqn_agent import RainbowDQNAgent # <-- 导入 RainbowDQNAgent
 import numpy as np
 import os
 
+class RainbowConfig:
+    """超参数配置"""
+    def __init__(self):
+        # 环境与智能体参数
+        self.grpc_address = "localhost:50051"
+        self.state_dim = 7               # 状态维度
+        self.action_dim = 3              # 动作维度
+
+        # 训练过程参数
+        self.max_episodes = 2000         # 总共训练的回合数 (增加以保证充分训练)
+        self.learning_starts = 5000      # 在开始学习前，先收集的经验步数 (显著减小)
+        self.gradient_steps = 1          # 每次与环境交互后，执行多少次梯度更新
+
+        # Rainbow DQN 核心超参数
+        self.lr = 0.0001                 # 学习率
+        self.gamma = 0.99                # 折扣因子
+        self.buffer_size = 100000        # 经验回放缓冲区大小
+        self.batch_size = 64             # 学习时采样的批量大小
+        self.tau = 0.005                 # 目标网络软更新系数
+        self.hidden_dim = 128            # 网络的隐藏层维度 (增加网络容量)
+        self.noisy_std = 0.1             # Noisy Nets 的初始噪声标准差
+
+        # PER (优先经验回放) 相关超参数
+        self.per_alpha = 0.6             # 优先级指数 (0: uniform, 1: full priority)
+        self.per_beta_start = 0.4        # IS(重要性采样)权重指数的初始值
+        self.per_beta_frames = 100000    # 将 beta 从初始值退火到 1.0 所需的步数
+
+        # 模型保存与加载的超参数
+        self.checkpoint_dir = "checkpoints_rainbow" # 为 Rainbow 创建独立的文件夹
+        self.save_every_episodes = 50    # 每隔多少个 episode 保存一次模型
+        self.resume_from_episode = 0     # 设置为 > 0 的数值以从特定 episode 恢复训练
+
 def main():
-    ################## 超参数 ##################
-    grpc_address = "localhost:50051"
-    max_episodes = 500       # 总共训练的回合数 (必须增加以进行公平比较)
-    
-    # Rainbow DQN 相关超参数
-    state_dim = 7               # [核心修改] 状态维度现在是 7
-    action_dim = 3              # 动作维度
-    lr = 0.0001                 # 学习率
-    gamma = 0.99                # 折扣因子
-    buffer_size = 100000         # 经验回放缓冲区大小
-    batch_size = 64             # 学习时采样的批量大小
-    tau = 0.005                 # 目标网络软更新系数
-    hidden_dim = 32            # 网络的隐藏层维度
-    noisy_std = 0.1             # Noisy Nets 的初始噪声标准差 (关键参数)
-    # 在开始学习前，先收集1000步的经验。原8000步的设置导致智能体在整个第一回合都不学习。
-    learning_starts = 100000
-    gradient_steps = 1          # 每次与环境交互后，执行多少次梯度更新。1是标准做法。
-
-    # PER (优先经验回放) 相关超参数
-    per_alpha = 0.6             # 优先级指数 (0: uniform, 1: full priority)
-    per_beta_start = 0.4        # IS(重要性采样)权重指数的初始值
-    per_beta_frames = 100000    # 将 beta 从初始值退火到 1.0 所需的步数
-
-    # 模型保存与加载的超参数
-    checkpoint_dir = "checkpoints"    # 模型保存的文件夹
-    save_every_episodes = 10          # 每隔多少个 episode 保存一次模型
-    resume_from_episode = 0           # 设置为 > 0 的数值以从特定 episode 恢复训练, e.g., 20
-
-    # 注意：Rainbow DQN 使用 Noisy Nets 进行探索，不再需要 Epsilon-Greedy 参数
-
-    #############################################
+    # 初始化超参数配置
+    config = RainbowConfig()
 
     # 如果模型保存目录不存在，则创建它
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
-        print(f"创建模型保存目录: {checkpoint_dir}")
+    if not os.path.exists(config.checkpoint_dir):
+        os.makedirs(config.checkpoint_dir)
+        print(f"创建模型保存目录: {config.checkpoint_dir}")
 
     # 初始化环境
-    env = MultiAgentSimEnv(grpc_address)
+    env = MultiAgentSimEnv(config.grpc_address)
 
     observations = env.reset()
     agent_ids = env.agent_ids
 
     # 为每个智能体创建一个 RainbowDQNAgent 实例
-    agents = {agent_id: RainbowDQNAgent(state_dim, action_dim, lr, gamma, buffer_size, batch_size, tau, noisy_std, hidden_dim, per_alpha) for
+    agents = {agent_id: RainbowDQNAgent(config.state_dim, config.action_dim, config.lr, config.gamma, config.buffer_size, config.batch_size, config.tau, config.noisy_std, config.hidden_dim, config.per_alpha) for
               agent_id in agent_ids}
 
     # --- 断点续训逻辑 ---
     start_episode = 1
-    if resume_from_episode > 0:
-        print(f"--- 正在从 Episode {resume_from_episode} 恢复训练 ---")
+    if config.resume_from_episode > 0:
+        print(f"--- 正在从 Episode {config.resume_from_episode} 恢复训练 ---")
         for agent_id, agent in agents.items():
-            checkpoint_path = f"{checkpoint_dir}/rainbow_agent_{agent_id}_episode_{resume_from_episode}.pth"
+            checkpoint_path = f"{config.checkpoint_dir}/rainbow_agent_{agent_id}_episode_{config.resume_from_episode}.pth"
             if os.path.exists(checkpoint_path):
                 checkpoint = torch.load(checkpoint_path)
                 agent.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
@@ -66,7 +69,7 @@ def main():
                 print(f"成功加载智能体 {agent_id} 的模型: {checkpoint_path}")
             else:
                 print(f"警告: 未找到智能体 {agent_id} 的模型文件，将从头开始训练。路径: {checkpoint_path}")
-        start_episode = resume_from_episode + 1
+        start_episode = config.resume_from_episode + 1
         # 注意: total_timesteps 不在这里恢复，它会从 0 开始重新计数，但这不影响模型学习。
 
     print("开始 Rainbow DQN 训练...")
@@ -74,7 +77,7 @@ def main():
     total_timesteps = 0 # 新增：全局步数计数器
 
     # 训练循环
-    for i_episode in range(start_episode, max_episodes + 1):
+    for i_episode in range(start_episode, config.max_episodes + 1):
         if i_episode > 1:
             observations = env.reset()
         
@@ -107,12 +110,13 @@ def main():
                 agents[agent_id].store_transition(obs, action, next_obs, reward, done)
                 
                 # 只有在收集到足够多的经验后才开始学习，并且达到更新频率
-                if total_timesteps > learning_starts:
-                    # 计算当前 beta 值 (线性退火)
-                    beta = per_beta_start + total_timesteps * (1.0 - per_beta_start) / per_beta_frames
+                if total_timesteps > config.learning_starts:
+                    # [优化] 计算当前 beta 值 (在学习开始后进行线性退火)
+                    fraction = min(1.0, (total_timesteps - config.learning_starts) / config.per_beta_frames)
+                    beta = config.per_beta_start + fraction * (1.0 - config.per_beta_start)
                     beta = min(1.0, beta)
                     # 执行 N 次梯度更新，以提高样本利用率
-                    for _ in range(gradient_steps):
+                    for _ in range(config.gradient_steps):
                         agents[agent_id].update(beta)
 
                 episode_rewards[agent_id] += reward
@@ -123,10 +127,10 @@ def main():
                 break
         
         # --- 定期保存模型逻辑 ---
-        if i_episode % save_every_episodes == 0:
+        if i_episode % config.save_every_episodes == 0:
             print(f"\n--- 正在保存 Episode {i_episode} 的模型 ---")
             for agent_id, agent in agents.items():
-                checkpoint_path = f"{checkpoint_dir}/rainbow_agent_{agent_id}_episode_{i_episode}.pth"
+                checkpoint_path = f"{config.checkpoint_dir}/rainbow_agent_{agent_id}_episode_{i_episode}.pth"
                 torch.save({
                     'policy_net_state_dict': agent.policy_net.state_dict(),
                     'optimizer_state_dict': agent.optimizer.state_dict(),
@@ -135,8 +139,8 @@ def main():
         
         avg_reward = np.mean(list(episode_rewards.values()))
         
-        if total_timesteps <= learning_starts:
-            print(f"Episode {i_episode} | 收集经验中... ({total_timesteps}/{learning_starts})")
+        if total_timesteps <= config.learning_starts:
+            print(f"Episode {i_episode} | 收集经验中... ({total_timesteps}/{config.learning_starts})")
         else:
             print(f"Episode {i_episode} | 平均奖励: {avg_reward:.2f}")
 
