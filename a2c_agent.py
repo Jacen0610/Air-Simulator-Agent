@@ -112,3 +112,15 @@ class A2CAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+    def save(self, filepath):
+        """
+        保存模型状态
+        """
+        torch.save(self.policy.state_dict(), filepath)
+
+    def load(self, filepath):
+        """
+        加载模型状态
+        """
+        self.policy.load_state_dict(torch.load(filepath))

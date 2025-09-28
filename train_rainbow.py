@@ -13,16 +13,16 @@ class RainbowConfig:
         self.action_dim = 3              # 动作维度
 
         # 训练过程参数
-        self.max_episodes = 2000         # 总共训练的回合数 (增加以保证充分训练)
+        self.max_episodes = 200         # 总共训练的回合数 (增加以保证充分训练)
         self.learning_starts = 5000      # 在开始学习前，先收集的经验步数 (显著减小)
-        self.gradient_steps = 1          # 每次与环境交互后，执行多少次梯度更新
+        self.gradient_steps = 4          # [优化] 增加梯度更新次数，提高样本利用率
 
         # Rainbow DQN 核心超参数
-        self.lr = 0.0001                 # 学习率
+        self.lr = 0.0000625              # [核心优化] 降低学习率，让学习更稳定 (这是Ape-X论文中的值)
         self.gamma = 0.99                # 折扣因子
         self.buffer_size = 100000        # 经验回放缓冲区大小
         self.batch_size = 64             # 学习时采样的批量大小
-        self.tau = 0.005                 # 目标网络软更新系数
+        self.tau = 0.001                 # [核心优化] 减慢目标网络更新速度，提供更稳定的学习目标
         self.hidden_dim = 128            # 网络的隐藏层维度 (增加网络容量)
         self.noisy_std = 0.1             # Noisy Nets 的初始噪声标准差
 
@@ -33,7 +33,7 @@ class RainbowConfig:
 
         # 模型保存与加载的超参数
         self.checkpoint_dir = "checkpoints_rainbow" # 为 Rainbow 创建独立的文件夹
-        self.save_every_episodes = 50    # 每隔多少个 episode 保存一次模型
+        self.save_every_episodes = 20    # 每隔多少个 episode 保存一次模型
         self.resume_from_episode = 0     # 设置为 > 0 的数值以从特定 episode 恢复训练
 
 def main():

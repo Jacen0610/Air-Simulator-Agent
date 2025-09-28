@@ -45,7 +45,7 @@ class A2CConfig:
 
         # 模型保存与加载的超参数
         self.checkpoint_dir = "checkpoints_a2c"
-        self.save_every_episodes = 20    # 每隔多少个 episode 保存一次模型
+        self.save_every_episodes = 5    # 每隔多少个 episode 保存一次模型
         self.resume_from_episode = 0     # 设置为 > 0 的数值以从特定 episode 恢复训练
 
 def main():
