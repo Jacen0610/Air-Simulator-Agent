@@ -70,6 +70,20 @@ class PPOAgent:
 
         self.MseLoss = nn.MSELoss()
 
+    def save(self, filepath):
+        """
+        保存模型状态 (只保存旧策略网络，因为新策略会从中复制)
+        """
+        torch.save(self.policy_old.state_dict(), filepath)
+
+    def load(self, filepath):
+        """
+        加载模型状态
+        """
+        self.policy_old.load_state_dict(torch.load(filepath))
+        # 确保 policy 网络也同步更新
+        self.policy.load_state_dict(self.policy_old.state_dict())
+
     def select_action(self, state):
         with torch.no_grad():
             state = torch.FloatTensor(state)
