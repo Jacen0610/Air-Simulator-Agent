@@ -81,6 +81,11 @@ def main():
         if i_episode > 1:
             observations = env.reset()
         
+        # [核心修复] 在每个回合开始时重置噪声，以实现稳定的探索
+        for agent in agents.values():
+            agent.policy_net.reset_noise()
+            agent.target_net.reset_noise()
+
         episode_rewards = {agent_id: 0 for agent_id in agent_ids}
 
         while True:

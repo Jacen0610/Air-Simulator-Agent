@@ -214,7 +214,8 @@ class RainbowDQNAgent:
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.memory = PrioritizedReplayBuffer(buffer_size, alpha=per_alpha)
-        self.loss_fn = nn.SmoothL1Loss(reduction='none') # 关键修改：reduction='none' 用于 PER
+        # [核心修复] 使用 reduction='none' 以便手动应用 IS 权重
+        self.loss_fn = nn.SmoothL1Loss(reduction='none')
 
     def select_action(self, state):
         # 使用 Noisy Nets，不再需要 epsilon-greedy
@@ -248,26 +249,34 @@ class RainbowDQNAgent:
         next_state_batch = torch.stack(batch.next_state)
         done_batch = torch.cat(batch.done)
 
+        # 预测的 Q 值: Q(s, a)
         state_action_values = self.policy_net(state_batch).gather(1, action_batch.unsqueeze(1))
 
         # --- Double DQN 核心 ---
-        # 1. 使用 policy_net 选择下一最佳动作
         with torch.no_grad():
+            # 1. 使用 policy_net 选择下一最佳动作 a*
             next_actions = self.policy_net(next_state_batch).max(1)[1].unsqueeze(1)
-            # 2. 使用 target_net 评估该动作的 Q 值
+            # 2. 使用 target_net 评估该动作的 Q 值: Q_target(s', a*)
             next_state_q_values = self.target_net(next_state_batch).gather(1, next_actions).squeeze(1)
         
+        # 计算目标 Q 值: r + gamma * Q_target(s', a*)
         expected_state_action_values = (next_state_q_values * self.gamma * (1 - done_batch)) + reward_batch
 
-        # 计算 TD-error 用于更新优先级
-        td_errors = (state_action_values - expected_state_action_values.unsqueeze(1)).abs().detach()
+        # --- [核心修复] 明确计算 TD-error 和加权损失 ---
+        # TD-error = Q(s,a) - (r + gamma * Q_target)
+        td_error = state_action_values - expected_state_action_values.unsqueeze(1)
 
-        # 更新 PER 优先级
-        self.memory.update_priorities(batch_indices, td_errors.squeeze(1).cpu().numpy())
+        # 使用 TD-error 的绝对值来更新 PER 优先级
+        priorities = td_error.abs().detach().cpu().numpy().squeeze()
+        self.memory.update_priorities(batch_indices, priorities)
 
-        # 计算加权的损失
-        loss = (self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1)) * is_weights.unsqueeze(1)).mean()
+        # 计算加权的 Huber loss
+        # loss is huber(td_error), which is huber(prediction - target)
+        # 我们将这个 element-wise loss 与重要性采样权重相乘
+        elementwise_loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
+        loss = (elementwise_loss * is_weights.unsqueeze(1)).mean()
 
+        # 梯度下降
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
