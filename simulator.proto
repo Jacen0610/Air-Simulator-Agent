@@ -1,0 +1,60 @@
+// 使用 proto3 语法
+syntax = "proto3";
+
+// 定义包名
+package proto;
+option go_package = "Air-Simulator/proto";
+
+// [核心修正] 定义离散的动作类型枚举，与 Go 内部定义完全对应
+enum ActionType {
+  ACTION_TYPE_WAIT = 0;        // 等待
+  ACTION_TYPE_SEND = 1;        // 发送 (并附带 p_value 参数)
+}
+
+// 定义一个可以携带参数的混合动作消息
+message Action {
+  ActionType type = 1;
+  float p_value = 2;
+}
+
+// 定义单个智能体的观测数据结构
+message AgentObservation {
+  bool has_message = 1;
+  bool primary_channel_busy = 3;
+  bool backup_channel_busy = 4;
+  int32 pending_acks_count = 5;
+  int32 outbound_queue_length = 6;
+  float top_message_wait_time_seconds = 7;
+  bool is_retransmission = 8;
+}
+
+// 定义 Step 函数返回的单个智能体的完整结果
+message AgentState {
+  AgentObservation observation = 1;
+  float reward = 2;
+  bool done = 3; 
+}
+
+// 定义 Step 函数的请求体
+message StepRequest {
+  map<string, Action> actions = 1;
+}
+
+// 定义 Step 函数的响应体
+message StepResponse {
+  map<string, AgentState> states = 1;
+}
+
+// 定义 Reset 函数的请求体 (通常为空)
+message ResetRequest {}
+
+// 定义 Reset 函数的响应体
+message ResetResponse {
+  map<string, AgentState> states = 1;
+}
+
+// 定义我们的核心服务：模拟器
+service Simulator {
+  rpc Step(StepRequest) returns (StepResponse) {}
+  rpc Reset(ResetRequest) returns (ResetResponse) {}
+}
