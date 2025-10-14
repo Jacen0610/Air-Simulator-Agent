@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fsimulator.proto\x12\x05proto\":\n\x06\x41\x63tion\x12\x1f\n\x04type\x18\x01 \x01(\x0e\x32\x11.proto.ActionType\x12\x0f\n\x07p_value\x18\x02 \x01(\x02\"\xdf\x01\n\x10\x41gentObservation\x12\x13\n\x0bhas_message\x18\x01 \x01(\x08\x12\x1c\n\x14primary_channel_busy\x18\x03 \x01(\x08\x12\x1b\n\x13\x62\x61\x63kup_channel_busy\x18\x04 \x01(\x08\x12\x1a\n\x12pending_acks_count\x18\x05 \x01(\x05\x12\x1d\n\x15outbound_queue_length\x18\x06 \x01(\x05\x12%\n\x1dtop_message_wait_time_seconds\x18\x07 \x01(\x02\x12\x19\n\x11is_retransmission\x18\x08 \x01(\x08\"X\n\nAgentState\x12,\n\x0bobservation\x18\x01 \x01(\x0b\x32\x17.proto.AgentObservation\x12\x0e\n\x06reward\x18\x02 \x01(\x02\x12\x0c\n\x04\x64one\x18\x03 \x01(\x08\"~\n\x0bStepRequest\x12\x30\n\x07\x61\x63tions\x18\x01 \x03(\x0b\x32\x1f.proto.StepRequest.ActionsEntry\x1a=\n\x0c\x41\x63tionsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x1c\n\x05value\x18\x02 \x01(\x0b\x32\r.proto.Action:\x02\x38\x01\"\x81\x01\n\x0cStepResponse\x12/\n\x06states\x18\x01 \x03(\x0b\x32\x1f.proto.StepResponse.StatesEntry\x1a@\n\x0bStatesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12 \n\x05value\x18\x02 \x01(\x0b\x32\x11.proto.AgentState:\x02\x38\x01\"\x0e\n\x0cResetRequest\"\x83\x01\n\rResetResponse\x12\x30\n\x06states\x18\x01 \x03(\x0b\x32 .proto.ResetResponse.StatesEntry\x1a@\n\x0bStatesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12 \n\x05value\x18\x02 \x01(\x0b\x32\x11.proto.AgentState:\x02\x38\x01*8\n\nActionType\x12\x14\n\x10\x41\x43TION_TYPE_WAIT\x10\x00\x12\x14\n\x10\x41\x43TION_TYPE_SEND\x10\x01\x32t\n\tSimulator\x12\x31\n\x04Step\x12\x12.proto.StepRequest\x1a\x13.proto.StepResponse\"\x00\x12\x34\n\x05Reset\x12\x13.proto.ResetRequest\x1a\x14.proto.ResetResponse\"\x00\x42\x15Z\x13\x41ir-Simulator/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fsimulator.proto\x12\x05proto\"\xdf\x01\n\x10\x41gentObservation\x12\x13\n\x0bhas_message\x18\x01 \x01(\x08\x12\x1c\n\x14primary_channel_busy\x18\x02 \x01(\x08\x12\x1b\n\x13\x62\x61\x63kup_channel_busy\x18\x03 \x01(\x08\x12\x1a\n\x12pending_acks_count\x18\x04 \x01(\x05\x12\x1d\n\x15outbound_queue_length\x18\x05 \x01(\x05\x12%\n\x1dtop_message_wait_time_seconds\x18\x06 \x01(\x02\x12\x19\n\x11is_retransmission\x18\x07 \x01(\x08\"X\n\nAgentState\x12,\n\x0bobservation\x18\x01 \x01(\x0b\x32\x17.proto.AgentObservation\x12\x0e\n\x06reward\x18\x02 \x01(\x02\x12\x0c\n\x04\x64one\x18\x03 \x01(\x08\",\n\x0bStepRequest\x12\x1d\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\r.proto.Action\"0\n\x0cStepResponse\x12 \n\x05state\x18\x01 \x01(\x0b\x32\x11.proto.AgentState\"\x0e\n\x0cResetRequest\"1\n\rResetResponse\x12 \n\x05state\x18\x01 \x01(\x0b\x32\x11.proto.AgentState**\n\x06\x41\x63tion\x12\x0f\n\x0b\x41\x43TION_WAIT\x10\x00\x12\x0f\n\x0b\x41\x43TION_SEND\x10\x01\x32t\n\tSimulator\x12\x31\n\x04Step\x12\x12.proto.StepRequest\x1a\x13.proto.StepResponse\"\x00\x12\x34\n\x05Reset\x12\x13.proto.ResetRequest\x1a\x14.proto.ResetResponse\"\x00\x42\x15Z\x13\x41ir-Simulator/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,34 +32,20 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'simulator_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z\023Air-Simulator/proto'
-  _globals['_STEPREQUEST_ACTIONSENTRY']._loaded_options = None
-  _globals['_STEPREQUEST_ACTIONSENTRY']._serialized_options = b'8\001'
-  _globals['_STEPRESPONSE_STATESENTRY']._loaded_options = None
-  _globals['_STEPRESPONSE_STATESENTRY']._serialized_options = b'8\001'
-  _globals['_RESETRESPONSE_STATESENTRY']._loaded_options = None
-  _globals['_RESETRESPONSE_STATESENTRY']._serialized_options = b'8\001'
-  _globals['_ACTIONTYPE']._serialized_start=812
-  _globals['_ACTIONTYPE']._serialized_end=868
-  _globals['_ACTION']._serialized_start=26
-  _globals['_ACTION']._serialized_end=84
-  _globals['_AGENTOBSERVATION']._serialized_start=87
-  _globals['_AGENTOBSERVATION']._serialized_end=310
-  _globals['_AGENTSTATE']._serialized_start=312
-  _globals['_AGENTSTATE']._serialized_end=400
-  _globals['_STEPREQUEST']._serialized_start=402
-  _globals['_STEPREQUEST']._serialized_end=528
-  _globals['_STEPREQUEST_ACTIONSENTRY']._serialized_start=467
-  _globals['_STEPREQUEST_ACTIONSENTRY']._serialized_end=528
-  _globals['_STEPRESPONSE']._serialized_start=531
-  _globals['_STEPRESPONSE']._serialized_end=660
-  _globals['_STEPRESPONSE_STATESENTRY']._serialized_start=596
-  _globals['_STEPRESPONSE_STATESENTRY']._serialized_end=660
-  _globals['_RESETREQUEST']._serialized_start=662
-  _globals['_RESETREQUEST']._serialized_end=676
-  _globals['_RESETRESPONSE']._serialized_start=679
-  _globals['_RESETRESPONSE']._serialized_end=810
-  _globals['_RESETRESPONSE_STATESENTRY']._serialized_start=596
-  _globals['_RESETRESPONSE_STATESENTRY']._serialized_end=660
-  _globals['_SIMULATOR']._serialized_start=870
-  _globals['_SIMULATOR']._serialized_end=986
+  _globals['_ACTION']._serialized_start=505
+  _globals['_ACTION']._serialized_end=547
+  _globals['_AGENTOBSERVATION']._serialized_start=27
+  _globals['_AGENTOBSERVATION']._serialized_end=250
+  _globals['_AGENTSTATE']._serialized_start=252
+  _globals['_AGENTSTATE']._serialized_end=340
+  _globals['_STEPREQUEST']._serialized_start=342
+  _globals['_STEPREQUEST']._serialized_end=386
+  _globals['_STEPRESPONSE']._serialized_start=388
+  _globals['_STEPRESPONSE']._serialized_end=436
+  _globals['_RESETREQUEST']._serialized_start=438
+  _globals['_RESETREQUEST']._serialized_end=452
+  _globals['_RESETRESPONSE']._serialized_start=454
+  _globals['_RESETRESPONSE']._serialized_end=503
+  _globals['_SIMULATOR']._serialized_start=549
+  _globals['_SIMULATOR']._serialized_end=665
 # @@protoc_insertion_point(module_scope)

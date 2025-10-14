@@ -1,60 +1,61 @@
 // 使用 proto3 语法
 syntax = "proto3";
 
-// 定义包名
+// 定义包名，这会映射到 Go 的包名
 package proto;
+
+// Go 的包路径选项
 option go_package = "Air-Simulator/proto";
 
-// [核心修正] 定义离散的动作类型枚举，与 Go 内部定义完全对应
-enum ActionType {
-  ACTION_TYPE_WAIT = 0;        // 等待
-  ACTION_TYPE_SEND = 1;        // 发送 (并附带 p_value 参数)
+// [修改后] 定义智能体可以执行的动作枚举，简化为2个动作
+enum Action {
+  ACTION_WAIT = 0; // 代表智能体选择等待
+  ACTION_SEND = 1; // 代表智能体尝试在主信道发送消息
 }
 
-// 定义一个可以携带参数的混合动作消息
-message Action {
-  ActionType type = 1;
-  float p_value = 2;
-}
-
-// 定义单个智能体的观测数据结构
+// 定义单个智能体的观测数据结构 (维持原样)
+// 这将是神经网络的输入
 message AgentObservation {
   bool has_message = 1;
-  bool primary_channel_busy = 3;
-  bool backup_channel_busy = 4;
-  int32 pending_acks_count = 5;
-  int32 outbound_queue_length = 6;
-  float top_message_wait_time_seconds = 7;
-  bool is_retransmission = 8;
+  bool primary_channel_busy = 2;
+  // 注意：在单信道模式下，此字段将始终为 false
+  bool backup_channel_busy = 3; 
+  int32 pending_acks_count = 4;
+  int32 outbound_queue_length = 5;
+  float top_message_wait_time_seconds = 6;
+  bool is_retransmission = 7;
 }
 
 // 定义 Step 函数返回的单个智能体的完整结果
 message AgentState {
   AgentObservation observation = 1;
   float reward = 2;
-  bool done = 3; 
+  bool done = 3; // 标志着一个 episode 是否结束
 }
 
-// 定义 Step 函数的请求体
+// [修改后] 定义 Step 函数的请求体，不再需要 map
 message StepRequest {
-  map<string, Action> actions = 1;
+  Action action = 1;
 }
 
-// 定义 Step 函数的响应体
+// [修改后] 定义 Step 函数的响应体，不再需要 map
 message StepResponse {
-  map<string, AgentState> states = 1;
+  AgentState state = 1;
 }
 
 // 定义 Reset 函数的请求体 (通常为空)
 message ResetRequest {}
 
-// 定义 Reset 函数的响应体
+// [修改后] 定义 Reset 函数的响应体，不再需要 map
 message ResetResponse {
-  map<string, AgentState> states = 1;
+  AgentState state = 1;
 }
 
 // 定义我们的核心服务：模拟器
 service Simulator {
+  // Step 方法：让单个智能体执行一步动作
   rpc Step(StepRequest) returns (StepResponse) {}
+
+  // Reset 方法：重置整个模拟环境
   rpc Reset(ResetRequest) returns (ResetResponse) {}
 }

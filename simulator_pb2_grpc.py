@@ -52,13 +52,15 @@ class SimulatorServicer(object):
     """
 
     def Step(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Step 方法：让单个智能体执行一步动作
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def Reset(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Reset 方法：重置整个模拟环境
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
