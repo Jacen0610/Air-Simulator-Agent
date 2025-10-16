@@ -194,7 +194,6 @@ class RNNDQNAgent:
         """
         self.target_q_network.load_state_dict(self.q_network.state_dict())
         self.target_q_network.eval()
-        print("目标网络已更新。")
 
     def save_model(self, path):
         """保存模型权重。"""
