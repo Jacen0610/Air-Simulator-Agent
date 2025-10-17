@@ -8,7 +8,7 @@ from rsac_agent import SACAgent
 import matplotlib.pyplot as plt
 
 # --- 超参数设置 ---
-NUM_EPISODES = 1000
+NUM_EPISODES = 40
 MAX_STEPS_PER_EPISODE = 5_000_000  # 安全网
 SEQUENCE_LENGTH = 10
 STATE_DIM = 7
