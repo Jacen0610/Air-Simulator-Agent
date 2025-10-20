@@ -8,7 +8,7 @@ from rdqn_agent import RNNDQNAgent
 import matplotlib.pyplot as plt
 
 # --- 超参数设置 ---
-NUM_EPISODES = 500
+NUM_EPISODES = 50
 MAX_STEPS_PER_EPISODE = 5000000  # 每个 episode 的最大步数，防止无限循环
 SEQUENCE_LENGTH = 10  # RNN 观测历史长度
 STATE_DIM = 7  # AgentObservation 的维度
@@ -92,7 +92,7 @@ def train():
               f"Steps: {step_count}")
 
         # 每隔一定 episode 保存模型
-        if (episode + 1) % 50 == 0:
+        if (episode + 1) % 20 == 0:
             agent.save_model(MODEL_SAVE_PATH)
 
     env.close()

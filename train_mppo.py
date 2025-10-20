@@ -8,8 +8,8 @@ from ppo_mlp_agent import PPOMLPAgent  # 导入新的 MLP Agent
 import matplotlib.pyplot as plt
 
 # --- 超参数设置 ---
-NUM_EPISODES = 40
-UPDATE_TIMESTEP = 4000  # 每收集 N 步数据后进行一次策略更新
+NUM_EPISODES = 50
+UPDATE_TIMESTEP = 8192  # 每收集 N 步数据后进行一次策略更新
 SEQUENCE_LENGTH = 10  # 环境仍然需要这个参数，但我们只用最后一个状态
 STATE_DIM = 7  # AgentObservation 的维度
 ACTION_DIM = 2  # 0: ACTION_WAIT, 1: ACTION_SEND
@@ -74,7 +74,6 @@ def train():
 
             # 4. 如果收集到足够的数据，则进行更新
             if time_step % UPDATE_TIMESTEP == 0:
-                print(f"  [Episode {episode}] 收集到 {UPDATE_TIMESTEP} 步数据，开始更新策略...")
                 agent.update()
                 time_step = 0
 
@@ -84,7 +83,7 @@ def train():
 
         print(f"Episode {episode} 结束, 总奖励: {episode_reward:.2f}, 平均奖励 (最近100轮): {avg_reward:.2f}")
 
-        if episode % 50 == 0:
+        if episode % 20 == 0:
             print(f"--- Episode {episode}，保存模型到 {MODEL_SAVE_PATH} ---")
             agent.save_model(MODEL_SAVE_PATH)
 

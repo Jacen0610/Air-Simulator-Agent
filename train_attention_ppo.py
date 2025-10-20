@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 # --- 超参数设置 ---
 NUM_EPISODES = 50
-UPDATE_TIMESTEP = 4000  # 每收集 N 步数据后进行一次策略更新
+UPDATE_TIMESTEP = 8192  # 每收集 N 步数据后进行一次策略更新
 SEQUENCE_LENGTH = 10  # RNN 观测历史长度
 STATE_DIM = 7  # AgentObservation 的维度
 ACTION_DIM = 2  # 0: ACTION_WAIT, 1: ACTION_SEND
@@ -81,7 +81,7 @@ def train():
         print(f"Episode {episode} 结束, 总奖励: {episode_reward:.2f}, 平均奖励 (最近100轮): {avg_reward:.2f}")
 
         # 每隔一定 episode 保存模型
-        if episode % 50 == 0:
+        if episode % 20 == 0:
             print(f"--- Episode {episode}，保存模型到 {MODEL_SAVE_PATH} ---")
             agent.save_model(MODEL_SAVE_PATH)
 

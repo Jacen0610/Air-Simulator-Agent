@@ -8,7 +8,7 @@ from rsac_agent import SACAgent
 import matplotlib.pyplot as plt
 
 # --- 超参数设置 ---
-NUM_EPISODES = 40
+NUM_EPISODES = 50
 MAX_STEPS_PER_EPISODE = 5_000_000  # 安全网
 SEQUENCE_LENGTH = 10
 STATE_DIM = 7
@@ -82,7 +82,7 @@ def train():
         print(
             f"Episode {episode}, Reward: {episode_reward:.2f}, Avg Reward (100 episodes): {avg_reward:.2f}, Alpha: {agent.alpha.item():.4f}")
 
-        if episode % 50 == 0:
+        if episode % 20 == 0:
             agent.save_model(MODEL_SAVE_PATH)
 
     env.close()
