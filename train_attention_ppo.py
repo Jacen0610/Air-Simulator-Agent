@@ -16,7 +16,7 @@ ACTION_DIM = 2  # 0: ACTION_WAIT, 1: ACTION_SEND
 HIDDEN_DIM = 128  # RNN 和注意力网络的隐藏层维度
 
 # PPO 特有超参数
-LR_ACTOR_CRITIC = 3e-4
+LR_ACTOR_CRITIC = 5e-5
 GAMMA = 0.99
 LAMBDA_GAE = 0.95  # GAE 的 lambda 参数
 EPS_CLIP = 0.2  # PPO 裁剪范围
@@ -70,7 +70,6 @@ def train():
 
             # 4. 如果收集到足够的数据，则进行更新
             if time_step % UPDATE_TIMESTEP == 0:
-                print(f"  [Episode {episode}] 收集到 {UPDATE_TIMESTEP} 步数据，开始更新策略...")
                 agent.update()
                 time_step = 0  # 重置步数计数器
 
