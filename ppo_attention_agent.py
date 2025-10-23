@@ -181,7 +181,7 @@ class PPOAttentionAgent:
 
             actor_loss = -torch.min(surr1, surr2).mean()
             critic_loss = self.loss_fn(state_values.squeeze(), returns)
-            entropy_bonus = -0.01 * dist_entropy.mean()
+            entropy_bonus = -0.05 * dist_entropy.mean()
 
             loss = actor_loss + 0.5 * critic_loss + entropy_bonus
 
