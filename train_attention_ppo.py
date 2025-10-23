@@ -151,7 +151,6 @@ def train():
             episode_reward += reward
 
             if time_step % UPDATE_TIMESTEP == 0:
-                print(f"  [Episode {episode}] 收集到 {UPDATE_TIMESTEP} 步数据，开始更新策略...")
                 agent.update()
                 time_step = 0
 
