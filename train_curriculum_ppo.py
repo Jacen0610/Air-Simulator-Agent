@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 PHASE1_EPISODES = 20  # 简单环境下的训练轮数
 PHASE2_EPISODES = 50  # 困难环境下的微调轮数
 
-UPDATE_TIMESTEP = 4096  # PPO 更新步数
+UPDATE_TIMESTEP = 8192  # PPO 更新步数
 SEQUENCE_LENGTH = 10
 STATE_DIM = 7
 ACTION_DIM = 2
 HIDDEN_DIM = 128
 
 # PPO 特有超参数
-LR_ACTOR_CRITIC = 1e-4  # [建议] 使用我们之前讨论的较小学习率
+LR_ACTOR_CRITIC = 3e-4  # [建议] 使用我们之前讨论的较小学习率
 GAMMA = 0.99
 LAMBDA_GAE = 0.95
 EPS_CLIP = 0.2
