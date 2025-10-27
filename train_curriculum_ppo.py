@@ -20,7 +20,7 @@ ACTION_DIM = 2
 HIDDEN_DIM = 128
 
 # PPO 特有超参数
-LR_ACTOR_CRITIC = 3e-5  # [建议] 使用我们之前讨论的较小学习率
+LR_ACTOR_CRITIC = 1e-4  # [建议] 使用我们之前讨论的较小学习率
 GAMMA = 0.99
 LAMBDA_GAE = 0.95
 EPS_CLIP = 0.2
