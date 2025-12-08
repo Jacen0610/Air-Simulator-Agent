@@ -21,14 +21,12 @@ class EpisodeTerminationCallback(BaseCallback):
         self.last_timestep = 0
 
     def _on_step(self) -> bool:
-        # self.locals['dones'] 是一个布尔数组，我们只关心第一个环境
         if self.locals['dones'][0]:
             info = self.locals['infos'][0]
             if 'episode' in info:
                 self.episode_rewards.append(info['episode']['r'])
                 self.episode_count += 1
                 
-                # 计算并打印这个 episode 的步数
                 episode_steps = self.num_timesteps - self.last_timestep
                 self.last_timestep = self.num_timesteps
                 
@@ -57,8 +55,11 @@ def plot_rewards(rewards: list, title: str, filename: str):
     plt.close()
 
 def main():
+    """
+    主训练流程。
+    """
+    # --- 配置 ---
     TRAIN_EPISODES = 50
-    EVAL_EPISODES = 10
     MODEL_DIR = "sb3_models"
     PLOT_DIR = "sb3_plots"
     MODEL_PATH = os.path.join(MODEL_DIR, "ppo_gym_env.zip")
@@ -66,9 +67,11 @@ def main():
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(PLOT_DIR, exist_ok=True)
 
+    # --- 1. 创建并封装环境 ---
     print("正在初始化 Gym 环境...")
     env = Monitor(GymEnv())
 
+    # --- 2. 训练模型 ---
     print(f"开始训练，目标为 {TRAIN_EPISODES} 个 episodes...")
     train_callback = EpisodeTerminationCallback(target_episodes=TRAIN_EPISODES, verbose=1)
 
@@ -81,10 +84,11 @@ def main():
     )
 
     try:
-        # 将 total_timesteps 设置为一个天文数字 (十亿)，确保训练只会被回调函数停止
+        # 将 total_timesteps 设置为一个天文数字，确保训练只会被回调函数停止
         model.learn(total_timesteps=int(1e12), callback=train_callback)
         
-        print(f"训练完成。正在保存模型至 {MODEL_PATH}...")
+        # --- 3. 保存模型和绘制训练图表 ---
+        print(f"\n训练完成。正在保存模型至 {MODEL_PATH}...")
         model.save(MODEL_PATH)
 
         print("正在绘制训练奖励图表...")
@@ -95,37 +99,12 @@ def main():
         )
 
     except Exception as e:
-        print(f"训练过程中发生错误: {e}")
+        print(f"\n训练过程中发生错误: {e}")
         print("请确保 Go 模拟器正在运行。")
+    finally:
+        # --- 4. 清理 ---
+        print("\n流程结束，关闭环境。")
         env.close()
-        return
-
-    print(f"\n开始评估模型，共 {EVAL_EPISODES} 个 episodes...")
-    eval_model = PPO.load(MODEL_PATH, env=env)
-
-    eval_rewards = []
-    for i in range(EVAL_EPISODES):
-        obs, info = env.reset()
-        done = False
-        episode_reward = 0
-        while not done:
-            action, _ = eval_model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            episode_reward += reward
-        
-        eval_rewards.append(episode_reward)
-        print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {episode_reward:.2f}")
-
-    print("正在绘制评估奖励图表...")
-    plot_rewards(
-        eval_rewards,
-        f"Evaluation Rewards ({len(eval_rewards)} Episodes)",
-        os.path.join(PLOT_DIR, "evaluation_rewards.png")
-    )
-
-    print("\n流程结束，关闭环境。")
-    env.close()
 
 if __name__ == '__main__':
     main()
