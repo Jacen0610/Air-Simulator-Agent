@@ -22,12 +22,8 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
         pe = torch.zeros(1, max_len, d_model)
         
-        # 为偶数索引计算 sin
         pe[0, :, 0::2] = torch.sin(position * div_term)
         
-        # --- 错误修复 ---
-        # 为奇数索引计算 cos，但要确保 div_term 的使用不超过奇数索引的数量
-        # 当 d_model 为奇数时，奇数索引的数量 (d_model // 2) 会比偶数索引少一个
         num_odd_indices = d_model // 2
         if num_odd_indices > 0:
             pe[0, :, 1::2] = torch.cos(position * div_term[:num_odd_indices])
@@ -158,7 +154,8 @@ def main():
         ent_coef=0.01,
         learning_rate=3e-4,
         verbose=0,
-        tensorboard_log="./attention_ppo_pe_tensorboard_sb3/"
+        tensorboard_log="./attention_ppo_pe_tensorboard_sb3/",
+        device='cpu'  # <--- 在这里明确指定使用 CPU
     )
 
     try:
