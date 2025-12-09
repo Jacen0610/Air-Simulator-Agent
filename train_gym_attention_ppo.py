@@ -2,7 +2,7 @@ import gymnasium as gym
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker # 导入 ticker 库用于美化坐标轴
+import matplotlib.ticker as mticker
 import os
 import math
 
@@ -21,8 +21,17 @@ class PositionalEncoding(nn.Module):
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
         pe = torch.zeros(1, max_len, d_model)
+        
+        # 为偶数索引计算 sin
         pe[0, :, 0::2] = torch.sin(position * div_term)
-        pe[0, :, 1::2] = torch.cos(position * div_term)
+        
+        # --- 错误修复 ---
+        # 为奇数索引计算 cos，但要确保 div_term 的使用不超过奇数索引的数量
+        # 当 d_model 为奇数时，奇数索引的数量 (d_model // 2) 会比偶数索引少一个
+        num_odd_indices = d_model // 2
+        if num_odd_indices > 0:
+            pe[0, :, 1::2] = torch.cos(position * div_term[:num_odd_indices])
+        
         self.register_buffer('pe', pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -80,27 +89,21 @@ class EpisodeTerminationCallback(BaseCallback):
 
 # --- 4. 更新后的绘图函数 ---
 def plot_rewards(rewards: list, title: str, filename: str):
-    """
-    为训练过程绘制奖励曲线，并确保 Y 轴清晰易读。
-    """
     if not rewards:
         print("没有可供绘制的奖励数据。")
         return
 
     episodes = range(1, len(rewards) + 1)
     
-    plt.figure(figsize=(15, 8)) # 增大画布尺寸以容纳更多标签
+    plt.figure(figsize=(15, 8))
     
-    # 绘制线图和散点图
     plt.plot(episodes, rewards, color='dodgerblue', linestyle='-', linewidth=1.5, alpha=0.7, label='Episode Reward')
-    plt.scatter(episodes, rewards, color='red', zorder=5, s=20) # s是点的大小
+    plt.scatter(episodes, rewards, color='red', zorder=5, s=20)
 
-    # 仅为部分点添加标签，避免过于拥挤
-    # 例如，每隔 N 个点或者只为最高/最低点添加标签
     if len(rewards) > 50:
-        label_interval = len(rewards) // 25 # 大约显示25个标签
+        label_interval = len(rewards) // 25
     else:
-        label_interval = 1 # 如果点不多，全部显示
+        label_interval = 1
 
     for i, reward in enumerate(rewards):
         if i % label_interval == 0:
@@ -110,7 +113,6 @@ def plot_rewards(rewards: list, title: str, filename: str):
     plt.xlabel("Episode", fontsize=12)
     plt.ylabel("Total Reward", fontsize=12)
     
-    # 设置 X 轴为整数刻度
     plt.gca().xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
@@ -168,7 +170,7 @@ def main():
         print("正在绘制训练奖励图表...")
         plot_rewards(
             train_callback.episode_rewards,
-            f"Attention PPO Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
+            f"Attention PPO (with PE) Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
             PLOT_PATH
         )
 
