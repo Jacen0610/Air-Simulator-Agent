@@ -9,7 +9,7 @@ from stable_baselines3 import PPO
 from custom_policy import AttentionExtractor
 from gym_env import GymEnv
 
-# --- 2. 从评估脚本中引入绘图函数 (保持不变) ---
+# --- 2. 绘图函数 (保持不变) ---
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     if not rewards:
         print("没有可供绘制的奖励数据。")
@@ -59,8 +59,8 @@ def main():
     print("正在初始化 Gym 环境...")
     env = GymEnv()
 
-    # 关键：在加载模型时，必须提供与训练时相同的 policy_kwargs
-    # 现在 AttentionExtractor 是从 custom_policy.py 导入的
+    # 关键：定义与训练时完全相同的 policy_kwargs。
+    # 这是确保 SB3 能够正确重建模型结构的关键。
     policy_kwargs = {
         "features_extractor_class": AttentionExtractor,
         "features_extractor_kwargs": dict(features_dim=128),
@@ -68,8 +68,10 @@ def main():
 
     print(f"正在从 {MODEL_PATH} 加载已训练的 Transformer PPO 模型...")
     try:
-        # 关键：SB3 现在可以正确匹配导入的 AttentionExtractor 类
-        model = PPO.load(MODEL_PATH, env=env, custom_objects={'policy': {'features_extractor_class': AttentionExtractor}})
+        # 正确的加载方式：传入 policy_kwargs，而不是 custom_objects。
+        # 这会使 SB3 在加载时使用与训练时相同的结构，从而通过检查。
+        model = PPO.load(MODEL_PATH, env=env, policy_kwargs=policy_kwargs, device='cpu')
+        print("模型加载成功！")
     except Exception as e:
         print(f"加载模型时发生错误: {e}")
         env.close()
@@ -85,7 +87,6 @@ def main():
         episode_reward = 0
         step_count = 0
         while not done:
-            # 使用确定性动作进行评估
             action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
