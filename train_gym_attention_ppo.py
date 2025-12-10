@@ -1,62 +1,17 @@
 import gymnasium as gym
-import torch
-import torch.nn as nn
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import os
-import math
 
 from stable_baselines3 import PPO
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 
+# --- 1. 从共享文件中导入自定义模块 ---
+from custom_policy import AttentionExtractor
 from gym_env import GymEnv
 
-# --- 1. 位置编码模块 ---
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(1, max_len, d_model)
-        
-        pe[0, :, 0::2] = torch.sin(position * div_term)
-        
-        num_odd_indices = d_model // 2
-        if num_odd_indices > 0:
-            pe[0, :, 1::2] = torch.cos(position * div_term[:num_odd_indices])
-        
-        self.register_buffer('pe', pe)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.pe[:, :x.size(1)]
-        return self.dropout(x)
-
-# --- 2. 集成位置编码的 AttentionExtractor ---
-class AttentionExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 128):
-        super().__init__(observation_space, features_dim)
-        seq_len, features_in = observation_space.shape
-        self.positional_encoding = PositionalEncoding(d_model=features_in, max_len=seq_len)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=features_in, nhead=1, dim_feedforward=256,
-            batch_first=True, activation='relu'
-        )
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=2)
-        self.linear = nn.Sequential(
-            nn.Linear(seq_len * features_in, features_dim),
-            nn.ReLU()
-        )
-
-    def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        observations_with_pe = self.positional_encoding(observations)
-        encoded_features = self.transformer_encoder(observations_with_pe)
-        flattened_features = torch.flatten(encoded_features, start_dim=1)
-        return self.linear(flattened_features)
-
-# --- 3. 回调函数 (保持不变) ---
+# --- 2. 回调函数 (保持不变) ---
 class EpisodeTerminationCallback(BaseCallback):
     def __init__(self, target_episodes: int, verbose: int = 0):
         super().__init__(verbose)
@@ -83,7 +38,7 @@ class EpisodeTerminationCallback(BaseCallback):
             return False
         return True
 
-# --- 4. 更新后的绘图函数 ---
+# --- 3. 绘图函数 (保持不变) ---
 def plot_rewards(rewards: list, title: str, filename: str):
     if not rewards:
         print("没有可供绘制的奖励数据。")
@@ -119,7 +74,7 @@ def plot_rewards(rewards: list, title: str, filename: str):
     print(f"已将图表保存至: {filename}")
     plt.close()
 
-# --- 5. 主训练流程 (保持不变) ---
+# --- 4. 主训练流程 ---
 def main():
     TRAIN_EPISODES = 50
     MODEL_DIR = "sb3_models"
@@ -133,6 +88,7 @@ def main():
     print("正在初始化 Gym 环境...")
     env = Monitor(GymEnv())
 
+    # 关键：policy_kwargs 现在使用从 custom_policy.py 导入的 AttentionExtractor
     policy_kwargs = {
         "features_extractor_class": AttentionExtractor,
         "features_extractor_kwargs": dict(features_dim=128),
@@ -155,7 +111,7 @@ def main():
         learning_rate=3e-4,
         verbose=0,
         tensorboard_log="./attention_ppo_pe_tensorboard_sb3/",
-        device='cpu'  # <--- 在这里明确指定使用 CPU
+        device='cpu'
     )
 
     try:

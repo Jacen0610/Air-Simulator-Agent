@@ -1,61 +1,15 @@
 import gymnasium as gym
-import torch
-import torch.nn as nn
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import os
-import math
 
 from stable_baselines3 import PPO
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
+# --- 1. 从共享文件中导入自定义模块 ---
+from custom_policy import AttentionExtractor
 from gym_env import GymEnv
 
-# --- 1. 从训练脚本中引入必要的自定义模块 ---
-# 这些模块对于加载使用自定义特征提取器的模型至关重要
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(1, max_len, d_model)
-        
-        pe[0, :, 0::2] = torch.sin(position * div_term)
-        
-        num_odd_indices = d_model // 2
-        if num_odd_indices > 0:
-            pe[0, :, 1::2] = torch.cos(position * div_term[:num_odd_indices])
-        
-        self.register_buffer('pe', pe)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.pe[:, :x.size(1)]
-        return self.dropout(x)
-
-class AttentionExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 128):
-        super().__init__(observation_space, features_dim)
-        seq_len, features_in = observation_space.shape
-        self.positional_encoding = PositionalEncoding(d_model=features_in, max_len=seq_len)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=features_in, nhead=1, dim_feedforward=256,
-            batch_first=True, activation='relu'
-        )
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=2)
-        self.linear = nn.Sequential(
-            nn.Linear(seq_len * features_in, features_dim),
-            nn.ReLU()
-        )
-
-    def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        observations_with_pe = self.positional_encoding(observations)
-        encoded_features = self.transformer_encoder(observations_with_pe)
-        flattened_features = torch.flatten(encoded_features, start_dim=1)
-        return self.linear(flattened_features)
-
-# --- 2. 从评估脚本中引入绘图函数 ---
+# --- 2. 从评估脚本中引入绘图函数 (保持不变) ---
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     if not rewards:
         print("没有可供绘制的奖励数据。")
@@ -91,7 +45,6 @@ def main():
     EVAL_EPISODES = 10
     MODEL_DIR = "sb3_models"
     PLOT_DIR = "sb3_plots"
-    # 关键：确保模型路径指向正确的 Transformer 模型文件
     MODEL_PATH = os.path.join(MODEL_DIR, "attention_ppo_model_with_pe.zip")
     PLOT_FILENAME = os.path.join(PLOT_DIR, "evaluation_rewards_transformer_ppo.png")
 
@@ -107,6 +60,7 @@ def main():
     env = GymEnv()
 
     # 关键：在加载模型时，必须提供与训练时相同的 policy_kwargs
+    # 现在 AttentionExtractor 是从 custom_policy.py 导入的
     policy_kwargs = {
         "features_extractor_class": AttentionExtractor,
         "features_extractor_kwargs": dict(features_dim=128),
@@ -114,8 +68,8 @@ def main():
 
     print(f"正在从 {MODEL_PATH} 加载已训练的 Transformer PPO 模型...")
     try:
-        # 关键：传入 policy_kwargs 和 device
-        model = PPO.load(MODEL_PATH, env=env, policy_kwargs=policy_kwargs, device='cpu')
+        # 关键：SB3 现在可以正确匹配导入的 AttentionExtractor 类
+        model = PPO.load(MODEL_PATH, env=env, custom_objects={'policy': {'features_extractor_class': AttentionExtractor}})
     except Exception as e:
         print(f"加载模型时发生错误: {e}")
         env.close()
