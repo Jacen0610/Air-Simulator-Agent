@@ -44,7 +44,8 @@ class ActorCriticAttentionMLP(nn.Module):
         self.attention_net = nn.Sequential(
             nn.Linear(state_dim * 2, hidden_dim),
             nn.Tanh(),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim, 1),
+            nn.Dropout(p=0.2)
         )
 
         # 决策网络的主体
@@ -178,7 +179,7 @@ class PPOAttentionMLPAgent:
 
             actor_loss = -torch.min(surr1, surr2).mean()
             critic_loss = self.loss_fn(state_values.squeeze(), returns)
-            entropy_bonus = -0.05 * dist_entropy.mean()  # 使用调整后的熵系数
+            entropy_bonus = -0.1 * dist_entropy.mean()  # 使用调整后的熵系数
 
             loss = actor_loss + 0.5 * critic_loss + entropy_bonus
 

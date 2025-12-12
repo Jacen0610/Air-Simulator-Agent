@@ -14,7 +14,7 @@ SEQUENCE_LENGTH = 10
 STATE_DIM = 7
 ACTION_DIM = 2
 HIDDEN_DIM = 128
-LR_ACTOR_CRITIC = 3e-4
+LR_ACTOR_CRITIC = 3e-5
 GAMMA = 0.99
 LAMBDA_GAE = 0.95
 EPS_CLIP = 0.2
@@ -43,6 +43,7 @@ def train():
         eps_clip=EPS_CLIP,
         k_epochs=K_EPOCHS
     )
+    scheduler = torch.optim.lr_scheduler.StepLR(agent.optimizer, step_size=10, gamma=0.9)
 
     # 如果存在已保存的模型，可以加载继续训练
     if os.path.exists(MODEL_SAVE_PATH):
@@ -84,7 +85,7 @@ def train():
         total_rewards.append(episode_reward)
         avg_rewards_window.append(episode_reward)
         avg_reward = np.mean(avg_rewards_window)
-
+        scheduler.step()
         print(f"Episode {episode} 结束, 总奖励: {episode_reward:.2f}, 平均奖励 (最近100轮): {avg_reward:.2f}")
 
         # 每隔一定 episode 保存模型
