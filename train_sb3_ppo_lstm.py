@@ -1,15 +1,17 @@
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
-from stable_baselines3 import PPO
+# [核心修改] 从 sb3_contrib 中导入 RecurrentPPO
+from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 import os
 
+# 导入为 LSTM 策略准备的新环境 (这个文件是正确的，保持不变)
 from gym_env_for_lstm import GymEnvForLSTM
 
 
-# ... (回调函数和绘图函数保持不变) ...
+# 回调函数和绘图函数与之前的版本完全相同
 class EpisodeTerminationCallback(BaseCallback):
     def __init__(self, target_episodes: int, verbose: int = 0):
         super(EpisodeTerminationCallback, self).__init__(verbose)
@@ -58,14 +60,15 @@ def plot_rewards(rewards: list, title: str, filename: str):
 
 def main():
     """
-    主训练流程 - PPO + LSTM 版本 (使用 SB3 v2.x 的最终正确配置)。
+    主训练流程 - RecurrentPPO (sb3-contrib) 版本。
     """
     # --- 配置 ---
     TRAIN_EPISODES = 50
     MODEL_DIR = "sb3_models"
     PLOT_DIR = "sb3_plots"
-    MODEL_PATH = os.path.join(MODEL_DIR, "ppo_lstm_gym_env.zip")
-    PLOT_PATH = os.path.join(PLOT_DIR, "training_rewards_ppo_lstm.png")
+    # 为 RecurrentPPO 模型设置新的文件名
+    MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_gym_env.zip")
+    PLOT_PATH = os.path.join(PLOT_DIR, "training_rewards_recurrent_ppo_lstm.png")
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(PLOT_DIR, exist_ok=True)
@@ -75,26 +78,16 @@ def main():
     env = Monitor(GymEnvForLSTM())
 
     # --- 2. 训练模型 ---
-    print(f"开始使用 PPO + LSTM 进行训练，目标为 {TRAIN_EPISODES} 个 episodes...")
+    print(f"开始使用 RecurrentPPO + MlpLstmPolicy 进行训练，目标为 {TRAIN_EPISODES} 个 episodes...")
     train_callback = EpisodeTerminationCallback(target_episodes=TRAIN_EPISODES, verbose=1)
 
-    # [核心修改] 为 PPO 模型配置 LSTM 网络
-    # 通过直接传递 lstm_hidden_size 来激活 LSTM
-    policy_kwargs = dict(
-        lstm_hidden_size=64,  # 直接指定 LSTM 隐藏层大小来启用它
-        net_arch=dict(
-            pi=[64],  # 定义 LSTM 之后的策略网络 MLP 层
-            vf=[64]  # 定义 LSTM 之后的价值网络 MLP 层
-        )
-    )
-
-    model = PPO(
-        "MlpPolicy",
+    # [核心修改] 使用 sb3_contrib 中的 RecurrentPPO
+    model = RecurrentPPO(
+        "MlpLstmPolicy",  # RecurrentPPO 默认支持此策略
         env,
-        policy_kwargs=policy_kwargs,  # 传入 LSTM 配置
         n_steps=8192,
         verbose=0,
-        tensorboard_log="./ppo_lstm_tensorboard_sb3/"
+        tensorboard_log="./recurrent_ppo_lstm_tensorboard_sb3/"
     )
 
     try:
@@ -107,13 +100,13 @@ def main():
         print("正在绘制训练奖励图表...")
         plot_rewards(
             train_callback.episode_rewards,
-            f"PPO+LSTM Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
+            f"RecurrentPPO (LSTM) Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
             PLOT_PATH
         )
 
     except Exception as e:
         print(f"\n训练过程中发生错误: {e}")
-        print("请确保 Go 模拟器正在运行。")
+        print("请确保 Go 模拟器正在运行，并且您已安装 'sb3-contrib'。")
     finally:
         # --- 4. 清理 ---
         print("\n流程结束，关闭环境。")
