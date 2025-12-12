@@ -92,7 +92,7 @@ def evaluate():
         print(f"错误：找不到模型文件 '{MODEL_LOAD_PATH}'。")
         return
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     print(f"评估将使用设备: {device}")
 
     policy = ActorCriticAttentionMLP(
