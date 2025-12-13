@@ -59,7 +59,7 @@ def main():
     主训练流程。
     """
     # --- 配置 ---
-    TRAIN_EPISODES = 50
+    TRAIN_EPISODES = 30
     MODEL_DIR = "sb3_models"
     PLOT_DIR = "sb3_plots"
     MODEL_PATH = os.path.join(MODEL_DIR, "ppo_gym_env.zip")

@@ -8,7 +8,7 @@ from ppo_attention_mlp_agent import PPOAttentionMLPAgent  # [关键] 导入新�
 import matplotlib.pyplot as plt
 
 # --- 超参数设置 (与之前的实验保持一致以进行公平比较) ---
-NUM_EPISODES = 50
+NUM_EPISODES = 30
 UPDATE_TIMESTEP = 8192
 SEQUENCE_LENGTH = 10
 STATE_DIM = 7

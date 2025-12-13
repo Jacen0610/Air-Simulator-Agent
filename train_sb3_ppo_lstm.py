@@ -63,7 +63,7 @@ def main():
     主训练流程 - RecurrentPPO (sb3-contrib) 版本。
     """
     # --- 配置 ---
-    TRAIN_EPISODES = 50
+    TRAIN_EPISODES = 30
     MODEL_DIR = "sb3_models"
     PLOT_DIR = "sb3_plots"
     # 为 RecurrentPPO 模型设置新的文件名
