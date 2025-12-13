@@ -20,6 +20,8 @@ LAMBDA_GAE = 0.95
 EPS_CLIP = 0.2
 K_EPOCHS = 10
 
+continueTrain = False
+
 # [修改] 为这个新模型设置独立的文件名
 MODEL_SAVE_PATH = "attention_mlp_ppo_model.pth"
 PLOT_SAVE_PATH = "training_rewards_attention_mlp_ppo.png"
@@ -46,7 +48,7 @@ def train():
     scheduler = torch.optim.lr_scheduler.StepLR(agent.optimizer, step_size=10, gamma=0.9)
 
     # 如果存在已保存的模型，可以加载继续训练
-    if os.path.exists(MODEL_SAVE_PATH):
+    if os.path.exists(MODEL_SAVE_PATH) and continueTrain:
         print(f"--- 发现已存在的模型 {MODEL_SAVE_PATH}，加载权重继续训练。 ---")
         agent.load_model(MODEL_SAVE_PATH)
 
