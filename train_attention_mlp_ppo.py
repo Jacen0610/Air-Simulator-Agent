@@ -89,7 +89,7 @@ def train():
         print(f"Episode {episode} 结束, 总奖励: {episode_reward:.2f}, 平均奖励 (最近100轮): {avg_reward:.2f}")
 
         # 每隔一定 episode 保存模型
-        if episode % 50 == 0:
+        if episode % 10 == 0:
             print(f"--- Episode {episode}，保存模型到 {MODEL_SAVE_PATH} ---")
             agent.save_model(MODEL_SAVE_PATH)
 
