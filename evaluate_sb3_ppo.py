@@ -5,9 +5,8 @@ import matplotlib.ticker as mticker
 from stable_baselines3 import PPO
 import os
 
-# 确保 Go 模拟器正在运行
-# 确保已安装: pip install stable-baselines3[extra] gymnasium matplotlib
-
+# [核心修改] 导入 FlattenObservation 封装器
+from gymnasium.wrappers import FlattenObservation
 from gym_env import GymEnv
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
@@ -57,10 +56,10 @@ def main():
     """
     # --- 配置 ---
     EVAL_EPISODES = 10
-    MODEL_DIR = "sb3_models"
-    PLOT_DIR = "sb3_plots"
+    MODEL_DIR = "SB3/sb3_models"
+    PLOT_DIR = "SB3/sb3_plots"
     MODEL_PATH = os.path.join(MODEL_DIR, "ppo_gym_env.zip")
-    PLOT_FILENAME = os.path.join(PLOT_DIR, "evaluation_rewards_standalone.png")
+    PLOT_FILENAME = os.path.join(PLOT_DIR, "sb3_ppo_evaluation_rewards.png")
 
     # 检查模型文件是否存在
     if not os.path.exists(MODEL_PATH):
@@ -72,8 +71,9 @@ def main():
 
     # --- 1. 创建环境并加载模型 ---
     print("正在初始化 Gym 环境...")
-    # 在评估时，我们不需要 Monitor 封装器，因为我们会手动记录奖励
+    # [核心修改] 必须应用与训练时完全相同的封装器
     env = GymEnv()
+    env = FlattenObservation(env)
 
     print(f"正在从 {MODEL_PATH} 加载已训练的模型...")
     try:
@@ -107,7 +107,7 @@ def main():
     print("\n评估完成。正在绘制奖励图表...")
     plot_evaluation_rewards(
         eval_rewards,
-        f"Standalone Evaluation Rewards ({len(eval_rewards)} Episodes)",
+        f"SB3 PPO Model Evaluation Rewards ({len(eval_rewards)} Episodes)",
         PLOT_FILENAME
     )
 

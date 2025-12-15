@@ -4,15 +4,12 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
+from gymnasium.wrappers import FlattenObservation
 import os
 
 from gym_env import GymEnv
 
 class EpisodeTerminationCallback(BaseCallback):
-    """
-    一个自定义的回调函数，用于在达到指定的 episode 数量后停止训练。
-    同时，它会打印每个 episode 的步数信息。
-    """
     def __init__(self, target_episodes: int, verbose: int = 0):
         super(EpisodeTerminationCallback, self).__init__(verbose)
         self.target_episodes = target_episodes
@@ -21,6 +18,7 @@ class EpisodeTerminationCallback(BaseCallback):
         self.last_timestep = 0
 
     def _on_step(self) -> bool:
+        # [代码优化] 对于单环境，直接检查 dones[0] 即可
         if self.locals['dones'][0]:
             info = self.locals['infos'][0]
             if 'episode' in info:
@@ -56,20 +54,24 @@ def plot_rewards(rewards: list, title: str, filename: str):
 
 def main():
     """
-    主训练流程。
+    主训练流程 (单环境 PPO)。
     """
     # --- 配置 ---
-    TRAIN_EPISODES = 30
-    MODEL_DIR = "sb3_models"
-    PLOT_DIR = "sb3_plots"
+    TRAIN_EPISODES = 20 # 增加训练轮数以获得更好效果
+    # [代码优化] 统一目录结构
+    MODEL_DIR = "SB3/sb3_models"
+    PLOT_DIR = "SB3/sb3_plots"
     MODEL_PATH = os.path.join(MODEL_DIR, "ppo_gym_env.zip")
+    PLOT_PATH = os.path.join(PLOT_DIR, "sb3_ppo_training_rewards.png")
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(PLOT_DIR, exist_ok=True)
 
-    # --- 1. 创建并封装环境 ---
-    print("正在初始化 Gym 环境...")
-    env = Monitor(GymEnv())
+    # --- 1. 创建并封装单个环境 ---
+    print("正在初始化 Gym 环境 (单实例)...")
+    env = GymEnv()
+    env = FlattenObservation(env)
+    env = Monitor(env)
 
     # --- 2. 训练模型 ---
     print(f"开始训练，目标为 {TRAIN_EPISODES} 个 episodes...")
@@ -84,25 +86,23 @@ def main():
     )
 
     try:
-        # 将 total_timesteps 设置为一个天文数字，确保训练只会被回调函数停止
-        model.learn(total_timesteps=int(1e12), callback=train_callback)
+        model.learn(total_timesteps=int(1e9), callback=train_callback)
         
-        # --- 3. 保存模型和绘制训练图表 ---
         print(f"\n训练完成。正在保存模型至 {MODEL_PATH}...")
         model.save(MODEL_PATH)
 
         print("正在绘制训练奖励图表...")
         plot_rewards(
             train_callback.episode_rewards,
-            f"Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
-            os.path.join(PLOT_DIR, "training_rewards.png")
+            f"SB3 PPO Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
+            PLOT_PATH
         )
 
     except Exception as e:
         print(f"\n训练过程中发生错误: {e}")
-        print("请确保 Go 模拟器正在运行。")
+        import traceback
+        traceback.print_exc()
     finally:
-        # --- 4. 清理 ---
         print("\n流程结束，关闭环境。")
         env.close()
 

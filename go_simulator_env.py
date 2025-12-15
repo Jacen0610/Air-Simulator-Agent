@@ -1,7 +1,7 @@
 # go_simulator_env.py
 import grpc
 import numpy as np
-import collections
+from collections import deque
 import time
 
 # 导入由 proto 文件生成的 gRPC 客户端模块
@@ -11,39 +11,37 @@ import simulator_pb2_grpc
 
 class GoSimulatorEnv:
     """
-    封装 Go 模拟器 gRPC 服务的强化学习环境。
-    提供类似 OpenAI Gym 的 reset() 和 step() 接口。
+    [2024-05-22 更新] 封装 Go 模拟器 gRPC 服务的强化学习环境。
+    此版本适配了将所有状态特征计算移至 Go 服务端的 protobuf 定义。
     """
     def __init__(self, grpc_server_address='localhost:50051', sequence_length=10):
         self.grpc_server_address = grpc_server_address
         self.channel = None
         self.stub = None
-        self.state_dim = 7
+        
+        # [核心修改] 状态维度现在与 proto 文件中的 AgentObservation 字段数量完全对应
+        self.state_dim = 7 
         self.action_dim = 2
+        
         self.sequence_length = sequence_length
-        self.observation_history = collections.deque(maxlen=sequence_length)
-        # 连接将在第一次调用 reset() 时建立。
+        # 这个队列现在存储的是从 Go 直接收到的、包含所有特征的观测向量
+        self.observation_history = deque(maxlen=self.sequence_length)
+        
+        # 连接将在第一次调用 reset() 时建立
 
     def _connect_grpc(self):
-        """
-        [修正后] 建立或重新建立 gRPC 连接。
-        这是一个对连接的“硬重置”。
-        """
-        # 如果存在旧的 channel，先关闭它。
+        """建立或重新建立 gRPC 连接。"""
         if self.channel:
             self.channel.close()
 
         print(f"正在尝试连接 gRPC 服务器: {self.grpc_server_address}...")
-        # 创建一个新的 channel 和 stub。
         self.channel = grpc.insecure_channel(self.grpc_server_address)
         self.stub = simulator_pb2_grpc.SimulatorStub(self.channel)
 
-        # 等待 channel 准备就绪，并设置一个超时。
         try:
             grpc.channel_ready_future(self.channel).result(timeout=10)
             print("gRPC 连接成功！")
         except grpc.FutureTimeoutError:
-            # 如果超时，清理新创建的 channel 并抛出错误。
             self.channel.close()
             self.channel = None
             self.stub = None
@@ -53,15 +51,18 @@ class GoSimulatorEnv:
             )
 
     def _parse_observation(self, proto_obs: simulator_pb2.AgentObservation) -> np.ndarray:
-        """将 protobuf 观测数据转换为 NumPy 数组。"""
+        """
+        [核心修改] 将 protobuf 观测数据转换为 NumPy 数组。
+        顺序与 simulator.proto 文件中的定义严格一致。
+        """
         obs_vector = np.array([
-            float(proto_obs.has_message),
-            float(proto_obs.primary_channel_busy),
-            float(proto_obs.backup_channel_busy),
-            float(proto_obs.pending_acks_count),
-            float(proto_obs.outbound_queue_length),
-            proto_obs.top_message_wait_time_seconds,
-            float(proto_obs.is_retransmission)
+            proto_obs.is_channel_busy,
+            proto_obs.has_data_to_send,
+            proto_obs.last_send_caused_collision,
+            proto_obs.channel_busy_ratio,
+            proto_obs.consecutive_idle_steps,
+            proto_obs.packet_waiting_time,
+            proto_obs.steps_since_last_collision
         ], dtype=np.float32)
         return obs_vector
 
@@ -75,11 +76,7 @@ class GoSimulatorEnv:
             raise ValueError(f"无效的动作整数: {action_int}")
 
     def reset(self) -> np.ndarray:
-        """
-        [修正后] 重置环境。现在会在每个 episode 开始时确保一个全新的连接。
-        """
-        # 总是在一个 episode 开始时尝试连接/重连。
-        # 这使得它对 Go 服务器在 episode 之间重启具有鲁棒性。
+        """重置环境，并在每个 episode 开始时确保一个全新的连接。"""
         self._connect_grpc()
 
         print("正在重置模拟器环境...")
@@ -94,20 +91,15 @@ class GoSimulatorEnv:
                 self.observation_history.append(initial_obs_vector)
 
             print("环境重置成功，等待 Go 模拟器启动飞行计划...")
-            time.sleep(2)
+            time.sleep(2) # 保留这个等待，可能有助于模拟器完全初始化
 
             return np.array(list(self.observation_history))
         except grpc.RpcError as e:
             print(f"gRPC Reset 调用失败: {e.code()} - {e.details()}")
-            # 如果 Reset 失败，说明有严重问题，直接抛出异常。
             raise
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, dict]:
-        """
-        [修正后] 执行一步。它依赖于 reset() 建立的连接，
-        如果连接在 episode 中途断开，将会失败。
-        """
-        # 我们假设连接是正常的。如果不是，RpcError 会被捕获。
+        """执行一步，并返回从 Go 模拟器收到的新状态。"""
         if not self.stub:
              raise ConnectionError("gRPC 连接未建立。请先调用 reset()。")
 
@@ -128,8 +120,6 @@ class GoSimulatorEnv:
             return np.array(list(self.observation_history)), reward, done, info
         except grpc.RpcError as e:
             print(f"gRPC Step 调用失败: {e.code()} - {e.details()}")
-            # 如果 step 失败，通常意味着服务器在 episode 中途崩溃。
-            # 最好的处理方式是让训练循环崩溃并由用户重启。
             raise
 
     def close(self):
