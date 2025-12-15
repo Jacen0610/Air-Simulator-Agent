@@ -31,7 +31,7 @@ class RolloutBuffer:
 
 class ActorCriticAttentionMLP(nn.Module):
     """
-    [全新创新网络] 直接在状态历史序列上应用注意力机制，不使用RNN。
+    [2024-05-22 优化] 直接在状态历史序列上应用注意力机制，并加入了位置编码。
     """
 
     def __init__(self, state_dim, action_dim, hidden_dim, sequence_length):
@@ -39,8 +39,14 @@ class ActorCriticAttentionMLP(nn.Module):
         self.state_dim = state_dim
         self.sequence_length = sequence_length
 
+        # [新] 创建可学习的位置编码，让模型感知时序关系
+        # 它的维度与状态序列相同，可以被直接加上去
+        self.positional_encoding = nn.Parameter(
+            torch.randn(1, sequence_length, state_dim), 
+            requires_grad=True
+        )
+
         # 注意力网络: 计算每个历史状态与当前状态的相关性分数
-        # 输入是 [历史状态, 当前状态] 的拼接
         self.attention_net = nn.Sequential(
             nn.Linear(state_dim * 2, hidden_dim),
             nn.Tanh(),
@@ -61,25 +67,28 @@ class ActorCriticAttentionMLP(nn.Module):
     def forward(self, state_sequence, return_weights=False):
         # state_sequence 形状: (batch_size, sequence_length, state_dim)
 
+        # [核心修改] 将位置信息加入到状态序列中
+        state_sequence_with_pos = state_sequence + self.positional_encoding
+
+        # --- 后续所有计算都使用包含了位置信息的新序列 ---
+
         # 提取当前状态作为 "查询" (Query)
-        current_state = state_sequence[:, -1, :].unsqueeze(1)  # 形状: (batch_size, 1, state_dim)
+        current_state = state_sequence_with_pos[:, -1, :].unsqueeze(1)  # 形状: (batch_size, 1, state_dim)
 
         # 将当前状态扩展，以便与历史序列中的每个状态进行拼接
-        current_state_expanded = current_state.repeat(1, self.sequence_length,
-                                                      1)  # 形状: (batch_size, sequence_length, state_dim)
+        current_state_expanded = current_state.repeat(1, self.sequence_length, 1)
 
         # 拼接，准备计算注意力分数
-        attention_input = torch.cat([state_sequence, current_state_expanded],
-                                    dim=2)  # 形状: (batch_size, sequence_length, state_dim * 2)
+        attention_input = torch.cat([state_sequence_with_pos, current_state_expanded], dim=2)
 
         # 计算分数
-        scores = self.attention_net(attention_input)  # 形状: (batch_size, sequence_length, 1)
+        scores = self.attention_net(attention_input)
 
         # 转换为权重
-        attention_weights = F.softmax(scores, dim=1)  # 形状: (batch_size, sequence_length, 1)
+        attention_weights = F.softmax(scores, dim=1)
 
-        # 计算上下文向量 (对原始状态序列进行加权)
-        context_vector = torch.sum(attention_weights * state_sequence, dim=1)  # 形状: (batch_size, state_dim)
+        # 计算上下文向量 (对包含了位置信息的序列进行加权)
+        context_vector = torch.sum(attention_weights * state_sequence_with_pos, dim=1)
 
         # 将上下文向量送入决策网络
         main_features = self.fc_main(context_vector)
@@ -179,7 +188,7 @@ class PPOAttentionMLPAgent:
 
             actor_loss = -torch.min(surr1, surr2).mean()
             critic_loss = self.loss_fn(state_values.squeeze(), returns)
-            entropy_bonus = -0.1 * dist_entropy.mean()  # 使用调整后的熵系数
+            entropy_bonus = -0.1 * dist_entropy.mean()
 
             loss = actor_loss + 0.5 * critic_loss + entropy_bonus
 
