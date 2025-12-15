@@ -67,10 +67,10 @@ def main():
     """
     # --- 配置 ---
     TRAIN_EPISODES = 50
-    MODEL_DIR = "sb3_models"
-    PLOT_DIR = "sb3_plots"
+    MODEL_DIR = "SB3/sb3_models"
+    PLOT_DIR = "SB3/sb3_plots"
     MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_single_env.zip")
-    PLOT_PATH = os.path.join(PLOT_DIR, "training_rewards_recurrent_ppo_single_env.png")
+    PLOT_PATH = os.path.join(PLOT_DIR, "sb3_ppo_LSTM_training_rewards_recurrent.png")
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(PLOT_DIR, exist_ok=True)
@@ -105,7 +105,7 @@ def main():
 
     try:
         # 使用一个足够大的数，让训练由 callback 控制
-        model.learn(total_timesteps=int(5e6), callback=train_callback)
+        model.learn(total_timesteps=int(1e9), callback=train_callback)
 
         print(f"\n训练完成。正在保存模型至 {MODEL_PATH}...")
         model.save(MODEL_PATH)
@@ -113,7 +113,7 @@ def main():
         print("正在绘制训练奖励图表...")
         plot_rewards(
             train_callback.episode_rewards,
-            f"RecurrentPPO Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
+            f"RecurrentPPO(LSTM) Training Rewards ({len(train_callback.episode_rewards)} Episodes)",
             PLOT_PATH
         )
 
