@@ -14,7 +14,7 @@ P_VALUE = 0.05
 SLOT_TIME_SECONDS = 0.0045
 
 # [新增] 绘图配置
-PLOT_DIR = "sb3_plots" # 复用现有的绘图目录
+PLOT_DIR = "SB3/sb3_plots" # 复用现有的绘图目录
 PLOT_FILENAME = os.path.join(PLOT_DIR, "evaluation_rewards_static_agent.png")
 
 # --- [新增] 绘图函数 ---

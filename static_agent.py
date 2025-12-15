@@ -20,7 +20,8 @@ class CSMAAgent:
 
     def select_action(self, observation_history):
         """
-        根据 CSMA 规则选择动作。
+        [2024-05-22 更新] 根据 CSMA 规则选择动作。
+        此版本适配了新的 protobuf 状态定义。
 
         :param observation_history: 包含历史状态的序列。
         :return: 动作 (0 for WAIT, 1 for SEND)
@@ -28,15 +29,15 @@ class CSMAAgent:
         # 对于这个简单的策略，我们只关心当前时刻的状态
         current_state = observation_history[-1]
 
-        # 从状态向量中提取所需信息
-        # 假设状态向量的索引如下：
-        # 0: has_message
-        # 1: primary_channel_busy
-        has_message = current_state[0] > 0.5
-        is_channel_busy = current_state[1] > 0.5
+        # [核心修改] 从状态向量中提取所需信息，使用新的索引约定
+        # 根据 simulator.proto:
+        # 0: is_channel_busy
+        # 1: has_data_to_send
+        is_channel_busy = current_state[0] > 0.5
+        has_data_to_send = current_state[1] > 0.5
 
         # 如果没有消息要发送，必须等待
-        if not has_message:
+        if not has_data_to_send:
             return 0  # WAIT
 
         # 如果有消息要发送，则执行 P-坚持 CSMA 逻辑
