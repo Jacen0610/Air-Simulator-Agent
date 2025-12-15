@@ -66,7 +66,7 @@ def main():
     主训练流程 - RecurrentPPO (单环境优化版)。
     """
     # --- 配置 ---
-    TRAIN_EPISODES = 1000
+    TRAIN_EPISODES = 50
     MODEL_DIR = "sb3_models"
     PLOT_DIR = "sb3_plots"
     MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_single_env.zip")

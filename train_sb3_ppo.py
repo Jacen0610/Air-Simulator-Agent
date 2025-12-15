@@ -57,7 +57,7 @@ def main():
     主训练流程 (单环境 PPO)。
     """
     # --- 配置 ---
-    TRAIN_EPISODES = 20 # 增加训练轮数以获得更好效果
+    TRAIN_EPISODES = 50 # 增加训练轮数以获得更好效果
     # [代码优化] 统一目录结构
     MODEL_DIR = "SB3/sb3_models"
     PLOT_DIR = "SB3/sb3_plots"
