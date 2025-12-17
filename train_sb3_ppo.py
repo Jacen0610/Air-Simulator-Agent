@@ -81,6 +81,7 @@ def main():
         "MlpPolicy",
         env,
         n_steps=8192,
+        ent_coef=0.05,
         verbose=0,
         tensorboard_log="./ppo_tensorboard_sb3/"
     )

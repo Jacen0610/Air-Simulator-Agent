@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 NUM_EPISODES = 30
 UPDATE_TIMESTEP = 8192
 SEQUENCE_LENGTH = 10
-STATE_DIM = 7
 ACTION_DIM = 2
 HIDDEN_DIM = 128
 LR_ACTOR_CRITIC = 3e-5
@@ -33,9 +32,13 @@ def train():
     """
     env = GoSimulatorEnv(sequence_length=SEQUENCE_LENGTH)
 
+    # [核心修改] 动态地从环境实例中获取状态维度
+    state_dim = env.state_dim
+    print(f"检测到状态维度: {state_dim}")
+
     # 实例化新的 Attention-MLP Agent
     agent = PPOAttentionMLPAgent(
-        state_dim=STATE_DIM,
+        state_dim=state_dim,
         action_dim=ACTION_DIM,
         hidden_dim=HIDDEN_DIM,
         sequence_length=SEQUENCE_LENGTH,
