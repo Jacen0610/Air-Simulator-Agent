@@ -50,8 +50,8 @@ class RunningMeanStd:
         return np.sqrt(self.var)
 
 # --- 超参数设置 ---
-NUM_EPISODES = 1000
-UPDATE_TIMESTEP = 2048 
+NUM_EPISODES = 50
+UPDATE_TIMESTEP = 4096
 SEQUENCE_LENGTH = 10
 ACTION_DIM = 2
 HIDDEN_DIM = 64 
@@ -66,9 +66,9 @@ MAX_GRAD_NORM = 0.5
 continueTrain = False
 
 # --- 修正：使用绝对路径 ---
-MODEL_SAVE_PATH = os.path.join(project_root, "SB3/models/attention_mlp_ppo_model.pth")
-PLOT_SAVE_PATH = os.path.join(project_root, "SB3/plots/train/training_rewards_attention_mlp_ppo.png")
-RMS_SAVE_PATH = os.path.join(project_root, "SB3/models/attention_mlp_ppo_rms.pkl")
+MODEL_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_ppo_model.pth")
+PLOT_SAVE_PATH = os.path.join(project_root, "../Pytorch/plots/training_rewards_attention_mlp_ppo.png")
+RMS_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_ppo_rms.pkl")
 
 def train():
     env = GoSimulatorEnv(grpc_server_address='localhost:50050', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
@@ -144,7 +144,7 @@ def train():
         scheduler.step()
         print(f"Episode {episode} 结束, 总奖励: {episode_reward:.2f}, 平均奖励 (最近100轮): {avg_reward:.2f}")
 
-        if episode % 50 == 0:
+        if episode % 25 == 0:
             print(f"--- Episode {episode}，保存模型和归一化统计数据 ---")
             os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True) # 确保目录存在
             agent.save_model(MODEL_SAVE_PATH)
