@@ -198,8 +198,16 @@ class PPOAttentionMLPAgent:
         )
 
         # 3. 在同一个 rollout 数据上进行 K 轮优化 (使用 Mini-batch)
+        # 用于记录每个 epoch 的平均损失
+        avg_actor_loss = 0
+        avg_critic_loss = 0
+        avg_entropy_bonus = 0
+        avg_total_loss = 0
+        num_batches = 0
+
         for _ in range(self.k_epochs):
             for indices in sampler:
+                num_batches += 1
                 # 提取 Mini-batch 数据
                 mb_old_states = old_states[indices]
                 mb_old_actions = old_actions[indices]
@@ -228,11 +236,30 @@ class PPOAttentionMLPAgent:
                 torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
                 self.optimizer.step()
 
+                avg_actor_loss += actor_loss.item()
+                avg_critic_loss += critic_loss.item()
+                avg_entropy_bonus += entropy_bonus.item()
+                avg_total_loss += loss.item()
+
         # 4. 将当前策略的权重复制到旧策略网络
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         # 5. 清空缓冲区
         self.buffer.clear()
+
+        # 返回平均损失
+        if num_batches > 0:
+            return {
+                'actor_loss': avg_actor_loss / num_batches,
+                'critic_loss': avg_critic_loss / num_batches,
+                'entropy_bonus': avg_entropy_bonus / num_batches,
+                'total_loss': avg_total_loss / num_batches
+            }
+        else:
+            return {
+                'actor_loss': 0, 'critic_loss': 0, 'entropy_bonus': 0, 'total_loss': 0
+            }
+
 
     def save_model(self, path):
         torch.save(self.policy_old.state_dict(), path)

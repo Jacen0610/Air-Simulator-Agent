@@ -14,6 +14,8 @@ import torch
 import numpy as np
 import collections
 import pickle
+import time # 用于生成时间戳
+from torch.utils.tensorboard import SummaryWriter # 导入 SummaryWriter
 from env.go_simulator_env import GoSimulatorEnv
 from agent.ppo_attention_mlp_agent import PPOAttentionMLPAgent
 import matplotlib.pyplot as plt
@@ -70,6 +72,8 @@ MODEL_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_pp
 PLOT_SAVE_PATH = os.path.join(project_root, "../Pytorch/plots/training_rewards_attention_mlp_ppo.png")
 RMS_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_ppo_rms.pkl")
 
+TENSORBOARD_LOG_DIR = os.path.join(project_root, "../TensorBoard/attention-ppo/runs", f"attention_mlp_ppo_{int(time.time())}")
+
 def train():
     env = GoSimulatorEnv(grpc_server_address='localhost:50051', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
     state_dim = env.state_dim
@@ -85,6 +89,10 @@ def train():
     )
     scheduler = torch.optim.lr_scheduler.StepLR(agent.optimizer, step_size=100, gamma=0.9)
 
+    # --- 初始化 TensorBoard SummaryWriter ---
+    writer = SummaryWriter(log_dir=TENSORBOARD_LOG_DIR)
+    print(f"TensorBoard 日志将保存到: {TENSORBOARD_LOG_DIR}")
+
     if os.path.exists(MODEL_SAVE_PATH) and continueTrain:
         print(f"--- 发现已存在的模型 {MODEL_SAVE_PATH}，加载权重继续训练。 ---")
         agent.load_model(MODEL_SAVE_PATH)
@@ -95,7 +103,7 @@ def train():
 
     total_rewards = []
     avg_rewards_window = collections.deque(maxlen=100)
-    time_step = 0
+    time_step_total = 0 # 用于 TensorBoard 的全局步数
 
     print(f"开始训练 Attention-MLP-PPO 智能体 (带手动归一化), 共 {NUM_EPISODES} 轮, 更新频率 {UPDATE_TIMESTEP} 步")
 
@@ -103,40 +111,43 @@ def train():
         current_obs_history_raw = env.reset()
         episode_reward = 0
         done = False
+        episode_steps = 0
 
         while not done:
-            time_step += 1
+            time_step_total += 1 # 更新全局步数
+            episode_steps += 1
 
             # --- 核心修改：对观测值进行归一化 ---
-            # 1. 更新 obs_rms 的统计数据 (只使用最新的观测)
             obs_rms.update(current_obs_history_raw[-1:])
-            # 2. 归一化整个历史序列
-            #    加上一个很小的 epsilon 防止除以零
             normalized_obs_history = (current_obs_history_raw - obs_rms.mean) / (obs_rms.std + 1e-8)
-            # 3. 裁剪归一化后的值，防止极端情况
             normalized_obs_history = np.clip(normalized_obs_history, -10.0, 10.0)
 
-            # 使用归一化后的观测值来选择动作
             action, log_prob, state_val = agent.select_action(normalized_obs_history)
 
             next_obs_history_raw, reward, done, _ = env.step(action)
 
-            # 存储的是归一化后的观测值
             agent.store_transition(normalized_obs_history, action, log_prob, reward, done, state_val)
 
             current_obs_history_raw = next_obs_history_raw
             episode_reward += reward
 
-            if time_step % UPDATE_TIMESTEP == 0:
-                # 在更新前，可以对奖励也进行归一化（可选，但推荐）
-                # 这里我们简单地对整个buffer的奖励进行z-score归一化
+            if time_step_total % UPDATE_TIMESTEP == 0:
+                # 在更新前，对奖励进行z-score归一化
                 rewards_np = np.array(agent.buffer.rewards)
                 rewards_mean = np.mean(rewards_np)
                 rewards_std = np.std(rewards_np) + 1e-8
                 agent.buffer.rewards = ((rewards_np - rewards_mean) / rewards_std).tolist()
                 
-                agent.update()
-                time_step = 0
+                # 获取损失并记录到 TensorBoard
+                loss_info = agent.update()
+                writer.add_scalar('train/actor_loss', loss_info['actor_loss'], time_step_total)
+                writer.add_scalar('train/critic_loss', loss_info['critic_loss'], time_step_total)
+                writer.add_scalar('train/entropy_bonus', loss_info['entropy_bonus'], time_step_total)
+                writer.add_scalar('train/total_loss', loss_info['total_loss'], time_step_total)
+                writer.add_scalar('train/learning_rate', scheduler.get_last_lr()[0], time_step_total)
+                
+                # 重置步数计数器 (这里是针对 UPDATE_TIMESTEP 的计数，不是全局步数)
+                # time_step = 0 # 移除此行，因为我们使用 time_step_total 作为全局计数器
 
         total_rewards.append(episode_reward)
         avg_rewards_window.append(episode_reward)
@@ -144,23 +155,28 @@ def train():
         scheduler.step()
         print(f"Episode {episode} 结束, 总奖励: {episode_reward:.2f}, 平均奖励 (最近100轮): {avg_reward:.2f}")
 
+        # --- 记录 Episode 级别的指标到 TensorBoard ---
+        writer.add_scalar('rollout/ep_rew_mean', episode_reward, time_step_total)
+        writer.add_scalar('rollout/ep_len_mean', episode_steps, time_step_total)
+        writer.add_scalar('rollout/avg_ep_rew_100_episodes', avg_reward, time_step_total)
+
+
         if episode % 25 == 0:
             print(f"--- Episode {episode}，保存模型和归一化统计数据 ---")
-            os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True) # 确保目录存在
+            os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
             agent.save_model(MODEL_SAVE_PATH)
             with open(RMS_SAVE_PATH, 'wb') as f:
                 pickle.dump(obs_rms, f)
 
     env.close()
     print("训练完成！")
-    os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True) # 确保目录存在
+    os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
     agent.save_model(MODEL_SAVE_PATH)
     with open(RMS_SAVE_PATH, 'wb') as f:
         pickle.dump(obs_rms, f)
 
     plt.figure(figsize=(12, 6))
     plt.plot(total_rewards, label='Episode Reward')
-    # 计算移动平均
     if len(total_rewards) >= 100:
         moving_avg = np.convolve(total_rewards, np.ones(100)/100, mode='valid')
         plt.plot(np.arange(99, len(total_rewards)), moving_avg, label='Moving Average (100 episodes)')
@@ -169,9 +185,14 @@ def train():
     plt.title('Attention-MLP-PPO Training Progress (with Normalization)')
     plt.legend()
     plt.grid(True)
-    os.makedirs(os.path.dirname(PLOT_SAVE_PATH), exist_ok=True) # 确保目录存在
+    os.makedirs(os.path.dirname(PLOT_SAVE_PATH), exist_ok=True)
     plt.savefig(PLOT_SAVE_PATH)
     print(f"奖励曲线已保存到 {PLOT_SAVE_PATH}")
+
+    # --- 关闭 TensorBoard SummaryWriter ---
+    writer.close()
+    print("TensorBoard SummaryWriter 已关闭。")
+
 
 if __name__ == '__main__':
     train()
