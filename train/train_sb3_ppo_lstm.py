@@ -1,4 +1,3 @@
-import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -9,7 +8,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 
 # 导入为 LSTM 策略准备的新环境
-from gym_env_for_lstm import GymEnvForLSTM
+from env.gym_env_for_lstm import GymEnvForLSTM
 
 
 class EpisodeTerminationCallback(BaseCallback):

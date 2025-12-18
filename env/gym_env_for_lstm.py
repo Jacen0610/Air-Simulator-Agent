@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 
 # 导入您现有的、返回观测序列的底层 Go 环境
-from go_simulator_env import GoSimulatorEnv
+from env.go_simulator_env import GoSimulatorEnv
 
 class GymEnvForLSTM(gym.Env):
     """
@@ -35,7 +35,7 @@ class GymEnvForLSTM(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(self.go_env.state_dim,),  # 形状是 (7,) 而不是 (10, 7)
+            shape=(self.go_env.state_dim,),  # 形状是 (8,) 而不是 (10, 8)
             dtype=np.float32
         )
 
@@ -65,7 +65,7 @@ class GymEnvForLSTM(gym.Env):
         latest_observation = next_observation_sequence[-1]
 
         terminated = done
-        truncated = done
+        truncated = False # 根据 SB3 的建议，通常只在因为时间限制等外部因素结束时才为 True
 
         return latest_observation, reward, terminated, truncated, info
 

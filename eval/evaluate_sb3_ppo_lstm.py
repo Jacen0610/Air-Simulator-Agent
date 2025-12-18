@@ -1,5 +1,4 @@
 # evaluate_sb3_ppo_lstm.py
-import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -7,7 +6,7 @@ import os
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
-from gym_env_for_lstm import GymEnvForLSTM
+from env.gym_env_for_lstm import GymEnvForLSTM
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """

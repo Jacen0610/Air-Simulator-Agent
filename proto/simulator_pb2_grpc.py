@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import simulator_pb2 as simulator__pb2
+from proto import simulator_pb2 as proto_dot_simulator__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in simulator_pb2_grpc.py depends on'
+        + ' but the generated code in proto/simulator_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -37,13 +37,13 @@ class SimulatorStub(object):
         """
         self.Step = channel.unary_unary(
                 '/proto.Simulator/Step',
-                request_serializer=simulator__pb2.StepRequest.SerializeToString,
-                response_deserializer=simulator__pb2.StepResponse.FromString,
+                request_serializer=proto_dot_simulator__pb2.StepRequest.SerializeToString,
+                response_deserializer=proto_dot_simulator__pb2.StepResponse.FromString,
                 _registered_method=True)
         self.Reset = channel.unary_unary(
                 '/proto.Simulator/Reset',
-                request_serializer=simulator__pb2.ResetRequest.SerializeToString,
-                response_deserializer=simulator__pb2.ResetResponse.FromString,
+                request_serializer=proto_dot_simulator__pb2.ResetRequest.SerializeToString,
+                response_deserializer=proto_dot_simulator__pb2.ResetResponse.FromString,
                 _registered_method=True)
 
 
@@ -70,13 +70,13 @@ def add_SimulatorServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Step': grpc.unary_unary_rpc_method_handler(
                     servicer.Step,
-                    request_deserializer=simulator__pb2.StepRequest.FromString,
-                    response_serializer=simulator__pb2.StepResponse.SerializeToString,
+                    request_deserializer=proto_dot_simulator__pb2.StepRequest.FromString,
+                    response_serializer=proto_dot_simulator__pb2.StepResponse.SerializeToString,
             ),
             'Reset': grpc.unary_unary_rpc_method_handler(
                     servicer.Reset,
-                    request_deserializer=simulator__pb2.ResetRequest.FromString,
-                    response_serializer=simulator__pb2.ResetResponse.SerializeToString,
+                    request_deserializer=proto_dot_simulator__pb2.ResetRequest.FromString,
+                    response_serializer=proto_dot_simulator__pb2.ResetResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -105,8 +105,8 @@ class Simulator(object):
             request,
             target,
             '/proto.Simulator/Step',
-            simulator__pb2.StepRequest.SerializeToString,
-            simulator__pb2.StepResponse.FromString,
+            proto_dot_simulator__pb2.StepRequest.SerializeToString,
+            proto_dot_simulator__pb2.StepResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -132,8 +132,8 @@ class Simulator(object):
             request,
             target,
             '/proto.Simulator/Reset',
-            simulator__pb2.ResetRequest.SerializeToString,
-            simulator__pb2.ResetResponse.FromString,
+            proto_dot_simulator__pb2.ResetRequest.SerializeToString,
+            proto_dot_simulator__pb2.ResetResponse.FromString,
             options,
             channel_credentials,
             insecure,

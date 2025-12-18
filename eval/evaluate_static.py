@@ -4,8 +4,8 @@ import time
 import os
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from go_simulator_env import GoSimulatorEnv
-from static_agent import CSMAAgent
+from env.go_simulator_env import GoSimulatorEnv
+from agent.static_agent import CSMAAgent
 
 # --- 配置 ---
 NUM_EVAL_EPISODES = 10

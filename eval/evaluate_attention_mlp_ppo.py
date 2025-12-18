@@ -1,34 +1,67 @@
-# evaluate_attention_mlp_ppo.py
 import torch
-import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import seaborn as sns  # 导入 seaborn 用于绘制高质量热图
+import seaborn as sns
+import numpy as np
+import pickle # 用于加载 RunningMeanStd
 
 # --- 关键组件导入 ---
-from go_simulator_env import GoSimulatorEnv
-from ppo_attention_mlp_agent import ActorCriticAttentionMLP
+from env.go_simulator_env import GoSimulatorEnv
+from agent.ppo_attention_mlp_agent import ActorCriticAttentionMLP
+
+# --- 从训练脚本复制 RunningMeanStd 类 ---
+class RunningMeanStd:
+    def __init__(self, shape, epsilon=1e-4):
+        self.mean = np.zeros(shape, 'float64')
+        self.var = np.ones(shape, 'float64')
+        self.count = epsilon
+
+    def update(self, x):
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+        
+        self.mean = new_mean
+        self.var = new_var
+        self.count = tot_count
+
+    @property
+    def std(self):
+        return np.sqrt(self.var)
 
 # --- 配置 ---
 EVAL_EPISODES = 10
 SEQUENCE_LENGTH = 10
-STATE_DIM = 7
+# --- 修正: 状态维度应为 8 ---
+STATE_DIM = 8
 ACTION_DIM = 2
-HIDDEN_DIM = 128
+# --- 修正: 隐藏层维度应为 64 ---
+HIDDEN_DIM = 64
 
 # 热图保存配置
 HEATMAP_DIR = "attention_heatmaps"
-# 设置为 True 以在所有 episodes 的 "SEND" 动作时生成热图
 GENERATE_HEATMAPS = True 
 
+# --- 修正模型和统计数据路径 ---
 MODEL_LOAD_PATH = "attention_mlp_ppo_model.pth"
+RMS_LOAD_PATH = "attention_mlp_ppo_rms.pkl"
 PLOT_SAVE_PATH = "evaluation_rewards_attention_mlp_ppo.png"
 
 # --- 绘图函数 ---
 
 def plot_evaluation_rewards(rewards: list, title: str, filename:str):
-    # (此函数保持不变)
     if not rewards:
         print("没有可供绘制的奖励数据。")
         return
@@ -37,10 +70,10 @@ def plot_evaluation_rewards(rewards: list, title: str, filename:str):
     plt.plot(episodes, rewards, color='dodgerblue', linestyle='-', linewidth=2, label='Episode Reward')
     plt.scatter(episodes, rewards, color='red', zorder=5)
     for i, reward in enumerate(rewards):
-        plt.text(episodes[i], reward, f' {reward:.2f}', va='center')
+        plt.text(episodes[i], reward, f' {reward:.2f}', va='center', ha='center') # 居中对齐
     plt.title(title, fontsize=16)
     plt.xlabel("Episode", fontsize=12)
-    plt.ylabel("Total Reward", fontsize=12)
+    plt.ylabel("Total Original Reward", fontsize=12) # 修正Y轴标签
     plt.gca().xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     plt.legend()
@@ -50,9 +83,6 @@ def plot_evaluation_rewards(rewards: list, title: str, filename:str):
     plt.close()
 
 def plot_attention_heatmap(weights, step, episode, action, save_dir):
-    """
-    为单步的注意力权重绘制并保存热图。
-    """
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
@@ -85,7 +115,17 @@ def evaluate():
     """
     # --- 1. 初始化环境和模型 ---
     print("正在初始化环境...")
-    env = GoSimulatorEnv(sequence_length=SEQUENCE_LENGTH)
+    env = GoSimulatorEnv(grpc_server_address='localhost:50050', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
+
+    # --- 加载归一化统计数据 ---
+    print(f"正在加载归一化统计数据: {RMS_LOAD_PATH}")
+    if not os.path.exists(RMS_LOAD_PATH):
+        print(f"错误：找不到归一化统计数据文件 '{RMS_LOAD_PATH}'。")
+        print("请确保 train_attention_mlp_ppo.py 脚本已运行并保存了 RMS 统计数据。")
+        return
+    with open(RMS_LOAD_PATH, 'rb') as f:
+        obs_rms = pickle.load(f)
+    print("归一化统计数据加载成功！")
 
     print(f"正在准备加载模型: {MODEL_LOAD_PATH}")
     if not os.path.exists(MODEL_LOAD_PATH):
@@ -110,33 +150,38 @@ def evaluate():
         env.close()
         return
     
-    policy.eval()
+    policy.eval() # 设置模型为评估模式
 
     # --- 2. 运行评估循环 ---
     print(f"\n开始评估模型，共 {EVAL_EPISODES} 个 episodes...")
     
     eval_rewards = []
     for i in range(1, EVAL_EPISODES + 1):
-        current_obs_history = env.reset()
+        current_obs_history_raw = env.reset()
         done = False
         episode_reward = 0
         step_count = 0
 
         while not done:
-            state_tensor = torch.tensor(current_obs_history, dtype=torch.float32).unsqueeze(0).to(device)
+            # --- 核心修改：对观测值进行归一化 ---
+            # 归一化整个历史序列
+            normalized_obs_history = (current_obs_history_raw - obs_rms.mean) / (obs_rms.std + 1e-8)
+            # 裁剪归一化后的值
+            normalized_obs_history = np.clip(normalized_obs_history, -10.0, 10.0)
+
+            state_tensor = torch.tensor(normalized_obs_history, dtype=torch.float32).unsqueeze(0).to(device)
             
             with torch.no_grad():
                 action_dist, _, attention_weights = policy(state_tensor, return_weights=True)
                 action = action_dist.probs.argmax().item()
 
-            # [核心修改] 只要开启热图生成且动作为 "SEND" (1)，就绘制热图
             if GENERATE_HEATMAPS and action == 1:
                 weights_np = attention_weights.squeeze(0).cpu().numpy()
                 plot_attention_heatmap(weights_np, step_count, i, action, HEATMAP_DIR)
 
-            next_obs_history, reward, done, _ = env.step(action)
+            next_obs_history_raw, reward, done, _ = env.step(action)
             
-            current_obs_history = next_obs_history
+            current_obs_history_raw = next_obs_history_raw
             episode_reward += reward
             step_count += 1
         
@@ -145,10 +190,12 @@ def evaluate():
 
     # --- 3. 绘制并保存结果 ---
     print("\n评估完成。正在绘制奖励图表...")
+
+    PLOT_FILENAME_WITH_TS = os.path.join("../Pytorch/plots/eval", f"attention_mlp_ppo_evaluation_rewards.png")
     plot_evaluation_rewards(
         eval_rewards,
-        f"Attention-MLP PPO Evaluation ({len(eval_rewards)} Episodes)",
-        PLOT_SAVE_PATH
+        f"Attention-MLP PPO Evaluation (Avg: {np.mean(eval_rewards):.2f})",
+        PLOT_FILENAME_WITH_TS
     )
 
     # --- 4. 清理 ---

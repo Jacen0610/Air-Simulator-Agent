@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
 import numpy as np
+from torch.utils.data import BatchSampler, SubsetRandomSampler
 
 
 class RolloutBuffer:
@@ -110,12 +111,14 @@ class PPOAttentionMLPAgent:
     """
 
     def __init__(self, state_dim, action_dim, hidden_dim, sequence_length,
-                 lr_actor_critic, gamma, lambda_gae, eps_clip, k_epochs):
+                 lr_actor_critic, gamma, lambda_gae, eps_clip, k_epochs, batch_size, max_grad_norm): # 新增 max_grad_norm
 
         self.gamma = gamma
         self.lambda_gae = lambda_gae
         self.eps_clip = eps_clip
         self.k_epochs = k_epochs
+        self.batch_size = batch_size
+        self.max_grad_norm = max_grad_norm # 保存 max_grad_norm
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Attention-MLP PPO Agent 使用设备: {self.device}")
@@ -150,16 +153,28 @@ class PPOAttentionMLPAgent:
     def update(self):
         # 1. 计算优势 (Advantage) 和回报 (Return) - 使用 GAE
         advantages = []
-        last_advantage = 0
+        
+        # 获取所有数据长度
+        data_len = len(self.buffer.rewards)
+        
+        # 确保 buffer.state_values 长度正确
+        if len(self.buffer.state_values) != data_len:
+            raise ValueError("Buffer state_values length mismatch with rewards length.")
 
-        for i in reversed(range(len(self.buffer.rewards))):
+        # 计算 GAE 优势
+        for i in reversed(range(data_len)):
             reward = self.buffer.rewards[i]
             done = self.buffer.dones[i]
             v_s = self.buffer.state_values[i]
-            v_s_next = self.buffer.state_values[i + 1] if i < len(self.buffer.rewards) - 1 else 0
+            v_s_next = self.buffer.state_values[i + 1] if i < data_len - 1 else 0
+            
             delta = reward + self.gamma * v_s_next * (1 - done) - v_s
-            last_advantage = delta + self.gamma * self.lambda_gae * (1 - done) * last_advantage
-            advantages.insert(0, last_advantage)
+            
+            if i == data_len - 1: # 最后一个时间步
+                last_advantage = delta
+            else:
+                last_advantage = delta + self.gamma * self.lambda_gae * (1 - done) * advantages[0]
+            advantages.insert(0, last_advantage) # 插入到列表开头
 
         returns = (torch.tensor(advantages, dtype=torch.float32) + torch.tensor(self.buffer.state_values,
                                                                                 dtype=torch.float32)).detach()
@@ -168,33 +183,50 @@ class PPOAttentionMLPAgent:
         advantages = torch.tensor(advantages, dtype=torch.float32)
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # 2. 转换数据为 Tensor
+        # 2. 转换数据为 Tensor (所有数据)
         old_states = torch.tensor(np.array(self.buffer.states), dtype=torch.float32).to(self.device)
         old_actions = torch.tensor(self.buffer.actions, dtype=torch.int64).to(self.device)
         old_log_probs = torch.tensor(self.buffer.log_probs, dtype=torch.float32).to(self.device)
         advantages = advantages.to(self.device)
         returns = returns.to(self.device)
+        
+        # 获取所有数据的索引
+        sampler = BatchSampler(
+            SubsetRandomSampler(range(data_len)),
+            self.batch_size,
+            drop_last=True # 丢弃不足 batch_size 的最后一个批次
+        )
 
-        # 3. 在同一个 rollout 数据上进行 K 轮优化
+        # 3. 在同一个 rollout 数据上进行 K 轮优化 (使用 Mini-batch)
         for _ in range(self.k_epochs):
-            action_dist, state_values = self.policy(old_states)
-            log_probs = action_dist.log_prob(old_actions)
-            dist_entropy = action_dist.entropy()
+            for indices in sampler:
+                # 提取 Mini-batch 数据
+                mb_old_states = old_states[indices]
+                mb_old_actions = old_actions[indices]
+                mb_old_log_probs = old_log_probs[indices]
+                mb_advantages = advantages[indices]
+                mb_returns = returns[indices]
 
-            ratios = torch.exp(log_probs - old_log_probs.detach())
+                action_dist, state_values = self.policy(mb_old_states)
+                log_probs = action_dist.log_prob(mb_old_actions)
+                dist_entropy = action_dist.entropy()
 
-            surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
+                ratios = torch.exp(log_probs - mb_old_log_probs.detach())
 
-            actor_loss = -torch.min(surr1, surr2).mean()
-            critic_loss = self.loss_fn(state_values.squeeze(), returns)
-            entropy_bonus = -0.1 * dist_entropy.mean()
+                surr1 = ratios * mb_advantages
+                surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * mb_advantages
 
-            loss = actor_loss + 0.5 * critic_loss + entropy_bonus
+                actor_loss = -torch.min(surr1, surr2).mean()
+                critic_loss = self.loss_fn(state_values.squeeze(), mb_returns)
+                entropy_bonus = -0.1 * dist_entropy.mean() # 熵奖励系数可以调整
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+                loss = actor_loss + 0.5 * critic_loss + entropy_bonus
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                # --- 核心修改：应用梯度裁剪 ---
+                torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+                self.optimizer.step()
 
         # 4. 将当前策略的权重复制到旧策略网络
         self.policy_old.load_state_dict(self.policy.state_dict())

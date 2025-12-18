@@ -1,10 +1,8 @@
 # train_mlp_ppo.py
-import torch
 import numpy as np
-import os
 import collections
-from go_simulator_env import GoSimulatorEnv
-from ppo_mlp_agent import PPOMLPAgent  # 导入新的 MLP Agent
+from env.go_simulator_env import GoSimulatorEnv
+from agent.ppo_mlp_agent import PPOMLPAgent  # 导入新的 MLP Agent
 import matplotlib.pyplot as plt
 
 # --- 超参数设置 ---

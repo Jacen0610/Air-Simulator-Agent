@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from go_simulator_env import GoSimulatorEnv
+from env.go_simulator_env import GoSimulatorEnv
 
 class GymEnv(gym.Env):
     """
@@ -29,8 +29,8 @@ class GymEnv(gym.Env):
         self.action_space = spaces.Discrete(self.go_env.action_dim)
 
         # 定义观测空间
-        # GoSimulatorEnv 返回一个形状为 (sequence_length, 7) 的 numpy 数组
-        # 值是浮点数，理论上没有严格的上下界，所以使用 -inf 到 inf
+        # GoSimulatorEnv 返回一个形状为 (sequence_length, state_dim) 的 numpy 数组
+        # state_dim 会从 go_env 自动获取 (当前是 8)
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -60,9 +60,9 @@ class GymEnv(gym.Env):
         observation, reward, done, info = self.go_env.step(action)
 
         # Gymnasium 的 step 返回五元组: obs, reward, terminated, truncated, info
-        # 在我们的场景中，'done' 同时代表 terminated 和 truncated
+        # 在我们的场景中，'done' 同时代表 terminated
         terminated = done
-        truncated = done
+        truncated = False # 根据 SB3 的建议，通常只在因为时间限制等外部因素结束时才为 True
 
         return observation, reward, terminated, truncated, info
 
