@@ -72,7 +72,7 @@ MODEL_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_pp
 PLOT_SAVE_PATH = os.path.join(project_root, "../Pytorch/plots/training_rewards_attention_mlp_ppo.png")
 RMS_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_ppo_rms.pkl")
 
-TENSORBOARD_LOG_DIR = os.path.join(project_root, "../TensorBoard/attention-ppo/runs", f"attention_mlp_ppo_{int(time.time())}")
+TENSORBOARD_LOG_DIR = os.path.join(project_root, "./TensorBoard/attention-ppo/runs", f"attention_mlp_ppo_{int(time.time())}")
 
 def train():
     env = GoSimulatorEnv(grpc_server_address='localhost:50051', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
