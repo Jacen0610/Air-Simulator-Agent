@@ -1,14 +1,24 @@
+import sys
+import os
+# --- 动态添加项目根目录到 sys.path ---
+# 获取当前脚本的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 假设项目根目录是脚本所在目录的父目录的父目录 (Air-Simulator-Agent/)
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# 将项目根目录添加到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ------------------------------------
+
 import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
-# --- 新增导入，用于环境包装和归一化 ---
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
-# ------------------------------------
-# --- 修正：导入正确的环境类名 GymEnv ---
-from env.gym_env import GymEnv
+
+from env.gym_env import GymEnv # 导入正确的环境类名
 
 # --- 自定义回调：记录奖励并按 Episode 数量停止训练 ---
 class RewardAndEpisodeCallback(BaseCallback):
@@ -20,14 +30,12 @@ class RewardAndEpisodeCallback(BaseCallback):
         self.current_reward = 0.0
 
     def _on_step(self) -> bool:
-        # 注意：由于使用了 VecNormalize，这里的奖励是已经被缩放过的
         self.current_reward += self.locals['rewards'][0]
         
         if any(self.locals.get("dones", [])):
             self.episode_count += 1
             self.episode_rewards.append(self.current_reward)
             if self.verbose > 0:
-                # 打印的是归一化后的奖励
                 print(f"Episode {self.episode_count}/{self.total_episodes} finished. Normalized Reward: {self.current_reward}")
             self.current_reward = 0.0
         
@@ -41,7 +49,7 @@ def plot_rewards(rewards, filename):
     plt.figure(figsize=(10, 5))
     plt.plot(range(1, len(rewards) + 1), rewards)
     plt.xlabel("Episode Number")
-    plt.ylabel("Normalized Episode Reward") # Y轴标签更新为归一化奖励
+    plt.ylabel("Normalized Episode Reward")
     plt.title("SB3 MLP PPO Normalized Reward Curve")
     
     ax = plt.gca()
@@ -56,17 +64,12 @@ def plot_rewards(rewards, filename):
 # --- 主训练函数 ---
 def main():
     # --- 训练设置 ---
-    TOTAL_TRAINING_EPISODES = 50 # 您可以根据需要调整总轮数
-    TENSORBOARD_LOG_DIR = "./sb3_logs/"
+    TOTAL_TRAINING_EPISODES = 50 
+    TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs") # 使用绝对路径
     
     # --- 核心改动：创建并包装环境以进行归一化 ---
-    # 1. 使用 make_vec_env 创建矢量化环境
-    # --- 修正：使用正确的环境类名 GymEnv ---
     vec_env = make_vec_env(lambda: GymEnv(grpc_server_address='localhost:50051'), n_envs=1)
-    
-    # 2. 使用 VecNormalize 包装器来归一化观测值和奖励
     env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.99)
-    # ---------------------------------------------
 
     # 创建回调实例
     reward_callback = RewardAndEpisodeCallback(total_episodes=TOTAL_TRAINING_EPISODES, verbose=1)
@@ -78,8 +81,8 @@ def main():
         n_steps=4096,
         verbose=0,
         tensorboard_log=TENSORBOARD_LOG_DIR,
-        learning_rate=3e-5,      # 使用更低的学习率以增加稳定性
-        max_grad_norm=0.5        # 加入梯度裁剪防止梯度爆炸
+        learning_rate=3e-5,      
+        max_grad_norm=0.5        
     )
     
     # 训练模型
@@ -87,26 +90,28 @@ def main():
         model.learn(
             total_timesteps=int(1e9),
             callback=reward_callback,
-            tb_log_name="PPO_GymEnv_Normalized" # 更新日志名称以反映正确的环境
+            tb_log_name="PPO_GymEnv_Normalized"
         )
     except Exception as e:
         print(f"训练过程中发生错误: {e}")
     finally:
         # --- 训练后操作 ---
         
-        # 1. 保存模型
-        model_save_path = f"../SB3/models/sb3_mlp_ppo.zip"
+        # 1. 保存模型 (使用绝对路径)
+        model_save_path = os.path.join(project_root, "SB3/models/sb3_mlp_ppo.zip")
+        os.makedirs(os.path.dirname(model_save_path), exist_ok=True) # 确保目录存在
         model.save(model_save_path)
         print(f"模型已保存至: {model_save_path}")
 
-        # 2. !! 必须保存 VecNormalize 的统计数据 !!
-        stats_path = f"../SB3/models/sb3_mlp_vec_normalize.pkl"
+        # 2. 保存 VecNormalize 的统计数据 (使用绝对路径)
+        stats_path = os.path.join(project_root, "SB3/models/sb3_mlp_vec_normalize.pkl")
         env.save(stats_path)
         print(f"环境统计数据已保存至: {stats_path}")
         
-        # 3. 生成并保存奖励曲线图
+        # 3. 生成并保存奖励曲线图 (使用绝对路径)
         if reward_callback.episode_rewards:
-            reward_plot_path = f"../SB3/plots/train/sb3_mlp_ppo.png"
+            reward_plot_path = os.path.join(project_root, "SB3/plots/train/sb3_mlp_ppo.png")
+            os.makedirs(os.path.dirname(reward_plot_path), exist_ok=True) # 确保目录存在
             plot_rewards(reward_callback.episode_rewards, reward_plot_path)
         else:
             print("没有足够的奖励数据来生成图表。")

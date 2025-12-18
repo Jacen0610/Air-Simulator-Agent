@@ -1,7 +1,17 @@
-# train_attention_mlp_ppo.py
+import sys
+import os
+# --- 动态添加项目根目录到 sys.path ---
+# 获取当前脚本的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 假设项目根目录是脚本所在目录的父目录 (Air-Simulator-Agent/)
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# 将项目根目录添加到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ------------------------------------
+
 import torch
 import numpy as np
-import os
 import collections
 import pickle
 from env.go_simulator_env import GoSimulatorEnv
@@ -40,8 +50,8 @@ class RunningMeanStd:
         return np.sqrt(self.var)
 
 # --- 超参数设置 ---
-NUM_EPISODES = 50
-UPDATE_TIMESTEP = 4096
+NUM_EPISODES = 1000
+UPDATE_TIMESTEP = 2048 
 SEQUENCE_LENGTH = 10
 ACTION_DIM = 2
 HIDDEN_DIM = 64 
@@ -51,17 +61,17 @@ LAMBDA_GAE = 0.95
 EPS_CLIP = 0.2
 K_EPOCHS = 10 
 BATCH_SIZE = 64 
-# --- 新增：梯度裁剪 ---
 MAX_GRAD_NORM = 0.5
 
 continueTrain = False
 
-MODEL_SAVE_PATH = "../Pytorch/models/attention_mlp_ppo_model.pth"
-PLOT_SAVE_PATH = "../Pytorch/plots/training_rewards_attention_mlp_ppo.png"
-RMS_SAVE_PATH = "../Pytorch/models/attention_mlp_ppo_rms.pkl"
+# --- 修正：使用绝对路径 ---
+MODEL_SAVE_PATH = os.path.join(project_root, "SB3/models/attention_mlp_ppo_model.pth")
+PLOT_SAVE_PATH = os.path.join(project_root, "SB3/plots/train/training_rewards_attention_mlp_ppo.png")
+RMS_SAVE_PATH = os.path.join(project_root, "SB3/models/attention_mlp_ppo_rms.pkl")
 
 def train():
-    env = GoSimulatorEnv(sequence_length=SEQUENCE_LENGTH)
+    env = GoSimulatorEnv(grpc_server_address='localhost:50050', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
     state_dim = env.state_dim
     print(f"检测到状态维度: {state_dim}")
 
@@ -71,7 +81,7 @@ def train():
         state_dim=state_dim, action_dim=ACTION_DIM, hidden_dim=HIDDEN_DIM,
         sequence_length=SEQUENCE_LENGTH, lr_actor_critic=LR_ACTOR_CRITIC,
         gamma=GAMMA, lambda_gae=LAMBDA_GAE, eps_clip=EPS_CLIP, k_epochs=K_EPOCHS,
-        batch_size=BATCH_SIZE, max_grad_norm=MAX_GRAD_NORM # 传递 max_grad_norm
+        batch_size=BATCH_SIZE, max_grad_norm=MAX_GRAD_NORM
     )
     scheduler = torch.optim.lr_scheduler.StepLR(agent.optimizer, step_size=100, gamma=0.9)
 
@@ -136,12 +146,14 @@ def train():
 
         if episode % 50 == 0:
             print(f"--- Episode {episode}，保存模型和归一化统计数据 ---")
+            os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True) # 确保目录存在
             agent.save_model(MODEL_SAVE_PATH)
             with open(RMS_SAVE_PATH, 'wb') as f:
                 pickle.dump(obs_rms, f)
 
     env.close()
     print("训练完成！")
+    os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True) # 确保目录存在
     agent.save_model(MODEL_SAVE_PATH)
     with open(RMS_SAVE_PATH, 'wb') as f:
         pickle.dump(obs_rms, f)
@@ -157,6 +169,7 @@ def train():
     plt.title('Attention-MLP-PPO Training Progress (with Normalization)')
     plt.legend()
     plt.grid(True)
+    os.makedirs(os.path.dirname(PLOT_SAVE_PATH), exist_ok=True) # 确保目录存在
     plt.savefig(PLOT_SAVE_PATH)
     print(f"奖励曲线已保存到 {PLOT_SAVE_PATH}")
 
