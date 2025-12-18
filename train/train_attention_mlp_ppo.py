@@ -71,7 +71,7 @@ PLOT_SAVE_PATH = os.path.join(project_root, "../Pytorch/plots/training_rewards_a
 RMS_SAVE_PATH = os.path.join(project_root, "../Pytorch/models/attention_mlp_ppo_rms.pkl")
 
 def train():
-    env = GoSimulatorEnv(grpc_server_address='localhost:50050', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
+    env = GoSimulatorEnv(grpc_server_address='localhost:50051', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
     state_dim = env.state_dim
     print(f"检测到状态维度: {state_dim}")
 
