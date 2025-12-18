@@ -97,7 +97,7 @@ def train():
     avg_rewards_window = collections.deque(maxlen=100)
     time_step = 0
 
-    print("开始训练 Attention-MLP-PPO 智能体 (带手动归一化)...")
+    print(f"开始训练 Attention-MLP-PPO 智能体 (带手动归一化), 共 {NUM_EPISODES} 轮, 更新频率 {UPDATE_TIMESTEP} 步")
 
     for episode in range(1, NUM_EPISODES + 1):
         current_obs_history_raw = env.reset()
