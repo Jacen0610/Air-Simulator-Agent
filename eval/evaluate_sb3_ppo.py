@@ -56,9 +56,9 @@ def main():
     # --- 配置 ---
     EVAL_EPISODES = 10
     # 修正模型和统计数据路径，与训练脚本保持一致
-    MODEL_PATH = "../SB3/models/sb3_ppo.zip"
-    STATS_PATH = "../SB3/models/vec_normalize.pkl"
-    PLOT_DIR = "../SB3/plots/eval" # 评估图表保存目录
+    MODEL_PATH = "../SB3/models/sb3_mlp_ppo.zip"
+    STATS_PATH = "../SB3/models/sb3_mlp_vec_normalize.pkl"
+    PLOT_DIR = "../SB3/plots/sb3_mlp_eval" # 评估图表保存目录
     
     # 确保保存目录存在
     os.makedirs(PLOT_DIR, exist_ok=True)
