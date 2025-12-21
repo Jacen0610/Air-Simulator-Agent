@@ -113,30 +113,34 @@ def main():
     print(f"\n开始评估模型，共 {EVAL_EPISODES} 个 episodes...")
     
     eval_rewards = []
+    
+    # VecEnv 只需要在开始时 reset 一次
+    # 之后每当 done=True 时，它会自动 reset 并返回新的 obs
+    obs = env.reset()
+    
     for i in range(EVAL_EPISODES):
-        obs = env.reset() # env.reset() 返回的是归一化后的观测
-        done = False
-        episode_reward = 0.0 # 使用浮点数
+        episode_reward = 0.0
         step_count = 0
+        done = False
+        
         while not done:
             action, _ = model.predict(obs, deterministic=True)
             
-            # [核心修正] VecNormalize (以及 SB3 的 VecEnv) 的 step 方法只返回 4 个值
-            # obs, reward, done, info
+            # VecEnv 的 step 返回 4 个值: obs, reward, done, info
             obs, reward, done, info = env.step(action)
             
-            # 在 VecEnv 中，done 是一个布尔数组（对于 n_envs=1，它是一个包含一个布尔值的数组）
-            # 如果 done[0] 为 True，说明环境已经重置了
+            # VecEnv 返回的是数组，我们需要取出标量值
+            # 即使是单个环境，done 也是 [bool]，reward 也是 [float]
+            is_done = done[0]
+            step_reward = reward[0]
             
-            # 注意：VecEnv 会自动重置环境，所以我们不需要手动调用 reset
-            # 但我们需要判断 episode 是否结束来跳出循环
-            # 对于 n_envs=1，我们可以直接看 done[0]
-            is_done = done[0] if isinstance(done, (list, np.ndarray)) else done
-            
-            episode_reward += reward[0] # VecNormalize 返回的 reward 是一个数组，取第一个元素
+            episode_reward += step_reward
             step_count += 1
             
             if is_done:
+                # 此时环境已经自动 reset 了，obs 是新的初始状态
+                # 我们只需要记录数据并跳出当前 episode 的循环
+                # 下一次 for 循环会直接使用这个新的 obs
                 break
         
         eval_rewards.append(episode_reward)
@@ -145,7 +149,8 @@ def main():
     # --- 4. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
     # 使用时间戳确保文件名唯一
-    PLOT_FILENAME = os.path.join(PLOT_DIR, f"sb3_ppo_evaluation_rewards.png")
+    timestamp = int(time.time())
+    PLOT_FILENAME = os.path.join(PLOT_DIR, f"sb3_ppo_evaluation_rewards_{timestamp}.png")
     plot_evaluation_rewards(
         eval_rewards,
         f"SB3 PPO Model Evaluation Rewards (Avg: {np.mean(eval_rewards):.2f})",
