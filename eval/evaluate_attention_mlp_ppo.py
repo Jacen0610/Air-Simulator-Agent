@@ -1,10 +1,23 @@
-import torch
+import sys
 import os
+
+# --- 动态添加项目根目录到 sys.path ---
+# 获取当前脚本的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 假设项目根目录是脚本所在目录的父目录 (Air-Simulator-Agent/)
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# 将项目根目录添加到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ------------------------------------
+
+import torch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
 import numpy as np
 import pickle # 用于加载 RunningMeanStd
+import time
 
 # --- 关键组件导入 ---
 from env.go_simulator_env import GoSimulatorEnv
@@ -51,13 +64,18 @@ ACTION_DIM = 2
 HIDDEN_DIM = 64
 
 # 热图保存配置
-HEATMAP_DIR = "attention_heatmaps"
 GENERATE_HEATMAPS = True 
 
-# --- 修正模型和统计数据路径 ---
-MODEL_LOAD_PATH = "attention_mlp_ppo_model.pth"
-RMS_LOAD_PATH = "attention_mlp_ppo_rms.pkl"
-PLOT_SAVE_PATH = "evaluation_rewards_attention_mlp_ppo.png"
+# --- 使用基于项目根目录的绝对路径 ---
+MODEL_LOAD_PATH = os.path.join(project_root, "Pytorch/models/attention_mlp_ppo_model.pth")
+RMS_LOAD_PATH = os.path.join(project_root, "Pytorch/models/attention_mlp_ppo_rms.pkl")
+PLOT_DIR = os.path.join(project_root, "Pytorch/plots/eval")
+HEATMAP_DIR = os.path.join(project_root, "Pytorch/plots/eval/attention_heatmaps")
+
+# 确保保存目录存在
+os.makedirs(PLOT_DIR, exist_ok=True)
+if GENERATE_HEATMAPS:
+    os.makedirs(HEATMAP_DIR, exist_ok=True)
 
 # --- 绘图函数 ---
 
@@ -190,12 +208,13 @@ def evaluate():
 
     # --- 3. 绘制并保存结果 ---
     print("\n评估完成。正在绘制奖励图表...")
-
-    PLOT_FILENAME_WITH_TS = os.path.join("../Pytorch/plots/eval", f"attention_mlp_ppo_evaluation_rewards.png")
+    # 使用时间戳确保文件名唯一
+    timestamp = int(time.time())
+    PLOT_FILENAME = os.path.join(PLOT_DIR, f"attention_mlp_ppo_evaluation_rewards.png")
     plot_evaluation_rewards(
         eval_rewards,
         f"Attention-MLP PPO Evaluation (Avg: {np.mean(eval_rewards):.2f})",
-        PLOT_FILENAME_WITH_TS
+        PLOT_FILENAME
     )
 
     # --- 4. 清理 ---

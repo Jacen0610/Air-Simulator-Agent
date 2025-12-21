@@ -1,10 +1,23 @@
+import sys
+import os
+
+# --- 动态添加项目根目录到 sys.path ---
+# 获取当前脚本的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 假设项目根目录是脚本所在目录的父目录 (Air-Simulator-Agent/)
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# 将项目根目录添加到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ------------------------------------
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.env_util import make_vec_env
-import os
 import numpy as np
+import time
 
 from env.gym_env import GymEnv # 导入正确的环境类名
 
@@ -55,10 +68,12 @@ def main():
     """
     # --- 配置 ---
     EVAL_EPISODES = 10
-    # 修正模型和统计数据路径，与训练脚本保持一致
-    MODEL_PATH = "../SB3/models/sb3_mlp_ppo.zip"
-    STATS_PATH = "../SB3/models/sb3_mlp_vec_normalize.pkl"
-    PLOT_DIR = "../SB3/plots/sb3_mlp_eval" # 评估图表保存目录
+    
+    # --- 使用基于项目根目录的绝对路径 ---
+    # 注意：这里的文件名需要与 train_sb3_ppo.py 中保存的文件名一致
+    MODEL_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_ppo.zip")
+    STATS_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_vec_normalize.pkl")
+    PLOT_DIR = os.path.join(project_root, "SB3/plots/eval") # 评估图表保存目录
     
     # 确保保存目录存在
     os.makedirs(PLOT_DIR, exist_ok=True)
@@ -75,8 +90,8 @@ def main():
 
     # --- 1. 创建环境并加载统计数据 ---
     print("正在初始化 Gym 环境并加载归一化统计数据...")
-    # 创建基础环境 (不需要 FlattenObservation)
-    eval_env = make_vec_env(lambda: GymEnv(grpc_server_address='localhost:50050'), n_envs=1)
+    # 创建基础环境
+    eval_env = make_vec_env(lambda: GymEnv(grpc_server_address='localhost:50051'), n_envs=1)
     
     # 加载 VecNormalize 统计数据并包装环境
     env = VecNormalize.load(STATS_PATH, eval_env)
@@ -115,7 +130,7 @@ def main():
 
     # --- 4. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
-
+    # 使用时间戳确保文件名唯一
     PLOT_FILENAME = os.path.join(PLOT_DIR, f"sb3_ppo_evaluation_rewards.png")
     plot_evaluation_rewards(
         eval_rewards,
