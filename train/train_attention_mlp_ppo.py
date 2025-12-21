@@ -52,8 +52,8 @@ class RunningMeanStd:
         return np.sqrt(self.var)
 
 # --- 超参数设置 ---
-NUM_EPISODES = 50
-UPDATE_TIMESTEP = 4096
+NUM_EPISODES = 100
+UPDATE_TIMESTEP = 2048
 SEQUENCE_LENGTH = 10
 ACTION_DIM = 2
 HIDDEN_DIM = 64 
