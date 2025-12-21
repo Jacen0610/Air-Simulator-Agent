@@ -133,7 +133,7 @@ def evaluate():
     """
     # --- 1. 初始化环境和模型 ---
     print("正在初始化环境...")
-    env = GoSimulatorEnv(grpc_server_address='localhost:50050', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
+    env = GoSimulatorEnv(grpc_server_address='localhost:50051', sequence_length=SEQUENCE_LENGTH) # 确保 grpc_server_address 正确
 
     # --- 加载归一化统计数据 ---
     print(f"正在加载归一化统计数据: {RMS_LOAD_PATH}")

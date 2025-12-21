@@ -120,10 +120,24 @@ def main():
         step_count = 0
         while not done:
             action, _ = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
+            
+            # [核心修正] VecNormalize (以及 SB3 的 VecEnv) 的 step 方法只返回 4 个值
+            # obs, reward, done, info
+            obs, reward, done, info = env.step(action)
+            
+            # 在 VecEnv 中，done 是一个布尔数组（对于 n_envs=1，它是一个包含一个布尔值的数组）
+            # 如果 done[0] 为 True，说明环境已经重置了
+            
+            # 注意：VecEnv 会自动重置环境，所以我们不需要手动调用 reset
+            # 但我们需要判断 episode 是否结束来跳出循环
+            # 对于 n_envs=1，我们可以直接看 done[0]
+            is_done = done[0] if isinstance(done, (list, np.ndarray)) else done
+            
             episode_reward += reward[0] # VecNormalize 返回的 reward 是一个数组，取第一个元素
             step_count += 1
+            
+            if is_done:
+                break
         
         eval_rewards.append(episode_reward)
         print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {episode_reward:.2f} | Steps: {step_count}")
