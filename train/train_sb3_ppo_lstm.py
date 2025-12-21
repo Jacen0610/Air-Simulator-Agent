@@ -1,11 +1,24 @@
+import sys
+import os
+# --- 动态添加项目根目录到 sys.path ---
+# 获取当前脚本的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 假设项目根目录是脚本所在目录的父目录 (Air-Simulator-Agent/)
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# 将项目根目录添加到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ------------------------------------
+
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import time
 
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.monitor import Monitor
+# --- 新增导入 ---
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import VecNormalize
 
 # 导入为 LSTM 策略准备的新环境
 from env.gym_env_for_lstm import GymEnvForLSTM
@@ -20,11 +33,11 @@ class EpisodeTerminationCallback(BaseCallback):
         self.start_time = time.time()
 
     def _on_step(self) -> bool:
-        # 这个回调实现对于单个或多个环境都是健壮的
-        # 当使用单个环境时, dones 是一个 [bool] 形式的数组
+        # 当 VecEnv 自动重置时，info 字典中会包含 'episode' 键
         if self.locals['dones'][0]:
             info = self.locals['infos'][0]
             if 'episode' in info:
+                # 注意：由于使用了 VecNormalize，这里的奖励是归一化后的
                 self.episode_rewards.append(info['episode']['r'])
                 self.episode_count += 1
 
@@ -32,7 +45,7 @@ class EpisodeTerminationCallback(BaseCallback):
                     elapsed_time = time.time() - self.start_time
                     sps = self.num_timesteps / elapsed_time if elapsed_time > 0 else 0
                     print(f"Episode {self.episode_count}/{self.target_episodes} | "
-                          f"Reward: {info['episode']['r']:.2f} | "
+                          f"Normalized Reward: {info['episode']['r']:.2f} | "
                           f"Total Steps: {self.num_timesteps} | "
                           f"SPS: {sps:.2f}")
 
@@ -51,7 +64,7 @@ def plot_rewards(rewards: list, title: str, filename: str):
         plt.plot(np.arange(len(moving_avg)) + 49, moving_avg, color='red', linewidth=2, label='Moving Average (50 episodes)')
     plt.title(title)
     plt.xlabel("Episode")
-    plt.ylabel("Total Reward")
+    plt.ylabel("Normalized Total Reward") # Y轴标签更新为归一化奖励
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
@@ -62,28 +75,33 @@ def plot_rewards(rewards: list, title: str, filename: str):
 
 def main():
     """
-    主训练流程 - RecurrentPPO (单环境优化版)。
+    主训练流程 - RecurrentPPO (带归一化)。
     """
     # --- 配置 ---
     TRAIN_EPISODES = 50
-    MODEL_DIR = "SB3/sb3_models"
-    PLOT_DIR = "SB3/sb3_plots"
-    MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_single_env.zip")
+    # --- 使用绝对路径 ---
+    MODEL_DIR = os.path.join(project_root, "SB3/models")
+    PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
+    TENSORBOARD_LOG_DIR = os.path.join(project_root, "recurrent_ppo_lstm_tensorboard_sb3")
+    
+    MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm.zip")
+    STATS_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_vec_normalize.pkl")
     PLOT_PATH = os.path.join(PLOT_DIR, "sb3_ppo_LSTM_training_rewards_recurrent.png")
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(PLOT_DIR, exist_ok=True)
 
-    # --- 1. 创建并封装单个环境 ---
-    print("正在初始化为 LSTM 优化的 Gym 环境 (单实例)...")
-    # [核心修改] 回退到使用单个 Monitor 封装的环境
-    env = Monitor(GymEnvForLSTM())
+    # --- 1. 创建并封装环境 ---
+    print("正在初始化为 LSTM 优化的 Gym 环境并应用归一化...")
+    # 使用 make_vec_env 创建矢量化环境
+    vec_env = make_vec_env(lambda: GymEnvForLSTM(grpc_server_address='localhost:50051'), n_envs=1)
+    # 使用 VecNormalize 包装器来归一化观测值和奖励
+    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.99)
 
     # --- 2. 定义并训练模型 ---
     print(f"开始使用 RecurrentPPO 进行训练，目标为 {TRAIN_EPISODES} 个 episodes...")
     train_callback = EpisodeTerminationCallback(target_episodes=TRAIN_EPISODES, verbose=1)
 
-    # [优化] 保留对 LSTM 友好的超参数
     policy_kwargs = dict(
         lstm_hidden_size=128,
         n_lstm_layers=1,
@@ -93,21 +111,23 @@ def main():
         "MlpLstmPolicy",
         env,
         policy_kwargs=policy_kwargs,
-        n_steps=2048,  # 对于RNN，一个不太大的 n_steps 有助于更频繁地更新
+        n_steps=2048,
         batch_size=64,
         n_epochs=10,
         gamma=0.99,
         learning_rate=1e-4,
         verbose=0,
-        tensorboard_log="./recurrent_ppo_lstm_tensorboard_sb3/"
+        tensorboard_log=TENSORBOARD_LOG_DIR
     )
 
     try:
-        # 使用一个足够大的数，让训练由 callback 控制
         model.learn(total_timesteps=int(1e9), callback=train_callback)
 
         print(f"\n训练完成。正在保存模型至 {MODEL_PATH}...")
         model.save(MODEL_PATH)
+        
+        print(f"正在保存 VecNormalize 统计数据至 {STATS_PATH}...")
+        env.save(STATS_PATH)
 
         print("正在绘制训练奖励图表...")
         plot_rewards(
