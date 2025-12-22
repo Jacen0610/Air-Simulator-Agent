@@ -2,8 +2,13 @@
 import numpy as np
 import time
 import os
+import sys
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+
+# 将项目根目录添加到 sys.path 以便导入 env 和 agent 包
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from env.go_simulator_env import GoSimulatorEnv
 from agent.static_agent import CSMAAgent
 

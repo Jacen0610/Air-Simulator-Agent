@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="Air-Simulator" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="D:\anaconda3\envs\gym" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="gym" project-jdk-type="Python SDK" />
 </project>
