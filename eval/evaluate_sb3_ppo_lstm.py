@@ -1,11 +1,24 @@
 # evaluate_sb3_ppo_lstm.py
+import sys
+import os
+# --- 动态添加项目根目录到 sys.path ---
+# 获取当前脚本的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 假设项目根目录是脚本所在目录的父目录 (Air-Simulator-Agent/)
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# 将项目根目录添加到 sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ------------------------------------
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import os
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import VecNormalize
 from env.gym_env_for_lstm import GymEnvForLSTM
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
@@ -46,11 +59,13 @@ def main():
     """
     # --- 配置 ---
     EVAL_EPISODES = 10
-    MODEL_DIR = "SB3/sb3_models"
-    PLOT_DIR = "SB3/sb3_plots"
+    # --- 使用绝对路径 ---
+    MODEL_DIR = os.path.join(project_root, "SB3/models")
+    PLOT_DIR = os.path.join(project_root, "SB3/plots/eval")
     
     # [核心修改] 指向 LSTM 模型文件
-    MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_single_env.zip")
+    MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm.zip")
+    STATS_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_vec_normalize.pkl")
     PLOT_FILENAME = os.path.join(PLOT_DIR, "evaluation_rewards_lstm.png")
 
     # 检查模型文件是否存在
@@ -58,13 +73,25 @@ def main():
         print(f"错误：找不到模型文件 '{MODEL_PATH}'。")
         print("请先运行 train_sb3_ppo_lstm.py 脚本来训练并保存一个模型。")
         return
+    
+    if not os.path.exists(STATS_PATH):
+        print(f"错误：找不到统计文件 '{STATS_PATH}'。")
+        print("请先运行 train_sb3_ppo_lstm.py 脚本来训练并保存统计数据。")
+        return
 
     os.makedirs(PLOT_DIR, exist_ok=True)
 
     # --- 1. 创建环境并加载模型 ---
     print("正在初始化为 LSTM 优化的 Gym 环境...")
     # [核心修改] 使用 GymEnvForLSTM，它提供模型所需的一维观测
-    env = GymEnvForLSTM()
+    # 使用 make_vec_env 创建矢量化环境
+    vec_env = make_vec_env(lambda: GymEnvForLSTM(), n_envs=1)
+    # 使用 VecNormalize 加载统计数据
+    env = VecNormalize.load(STATS_PATH, vec_env)
+    # 评估时不要更新统计数据
+    env.training = False
+    # 评估时也不要归一化奖励，以便看到真实的奖励值
+    env.norm_reward = False
 
     print(f"正在从 {MODEL_PATH} 加载已训练的 RecurrentPPO 模型...")
     try:
@@ -80,7 +107,7 @@ def main():
     
     eval_rewards = []
     for i in range(EVAL_EPISODES):
-        obs, info = env.reset()
+        obs = env.reset()
         
         # [核心修改] RecurrentPPO 需要额外处理 lstm_states 和 episode_starts
         lstm_states = None
@@ -97,9 +124,10 @@ def main():
                 episode_start=episode_starts,
                 deterministic=True
             )
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            episode_reward += reward
+            obs, reward, done, info = env.step(action)
+            
+            # VecEnv 返回的 reward 是一个数组
+            episode_reward += reward[0]
             step_count += 1
             # 在 episode 的后续步骤中，episode_starts 应为 False
             episode_starts = np.zeros((1,), dtype=bool)
