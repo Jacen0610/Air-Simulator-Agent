@@ -13,6 +13,10 @@ if project_root not in sys.path:
 import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import numpy as np
+import seaborn as sns
+import torch as th
+import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
@@ -51,6 +55,68 @@ class RewardAndEpisodeCallback(BaseCallback):
             return False
         return True
 
+# --- 新增：用于可视化注意力权重的回调 ---
+class AttentionVisualizationCallback(RewardAndEpisodeCallback):
+    def __init__(self, total_episodes: int, viz_freq: int, verbose=0):
+        super().__init__(total_episodes, verbose)
+        self.viz_freq = viz_freq
+
+    def _on_step(self) -> bool:
+        # 首先调用父类的 _on_step 方法
+        continue_training = super()._on_step()
+        if not continue_training:
+            return False
+
+        # 每隔 viz_freq 个 episode 触发一次
+        if self.episode_count > 0 and self.episode_count % self.viz_freq == 0:
+            # 确保在 episode 结束时才执行
+            if self.locals['dones'][0]:
+                self.visualize_attention()
+        
+        return True
+
+    def visualize_attention(self):
+        print(f"\n--- Episode {self.episode_count}: 绘制注意力热力图 ---")
+
+        feature_extractor = self.model.policy.features_extractor
+        self.model.policy.eval()
+
+        # 获取当前最新观测并转换为 Tensor
+        obs_tensor, _ = self.model.policy.obs_to_tensor(self.locals['new_obs'])
+
+        # 触发前向传播以更新权重
+        with th.no_grad():
+            feature_extractor(obs_tensor)
+
+        # 获取权重 (修改后的 Extractor 返回的是最后一行，即当前对历史的关注)
+        # 形状应该是 (seq_len,)
+        attn_weights = feature_extractor.last_attn_weights
+
+        self.model.policy.train()
+
+        if attn_weights is not None:
+            plt.figure(figsize=(12, 3))
+
+            # 将 1D 权重转换为 2D 矩阵形状 (1, seq_len) 方便绘制热力图
+            data = attn_weights.reshape(1, -1)
+
+            # 绘制热力图
+            ax = sns.heatmap(data, annot=True, fmt=".2f", cmap="YlGnBu",
+                             cbar_kws={'label': 'Attention Weight'})
+
+            # 设置坐标轴
+            ax.set_title(f'Attention Focus at Episode {self.episode_count}\n(What the Agent is looking at RIGHT NOW)')
+            ax.set_xlabel('Steps back in History (0 is oldest, 31 is newest)')
+            ax.set_yticklabels(['Current Decision'])
+
+            # 强调最后几个 Step（微观）和较早的 Step（宏观）
+            plt.tight_layout()
+
+            # 写入 TensorBoard
+            self.logger.record(f"attention/heatmap_ep_{self.episode_count}",
+                               plt.gcf(), exclude=("stdout", "log", "json", "csv"))
+            plt.close()
+
 # --- 绘制奖励曲线图的函数 ---
 def plot_rewards(rewards, filename):
     plt.figure(figsize=(10, 5))
@@ -71,8 +137,8 @@ def plot_rewards(rewards, filename):
 # --- 主训练函数 ---
 def main():
     # --- 训练设置 ---
-    TOTAL_TRAINING_EPISODES = 1000
-    SEQUENCE_LENGTH = 10
+    TOTAL_TRAINING_EPISODES = 500
+    SEQUENCE_LENGTH = 32
     FEATURES_DIM = 128 # 最终从提取器输出的特征维度
     
     # --- 文件路径设置 ---
@@ -105,18 +171,18 @@ def main():
         "MlpPolicy", # 即使是自定义提取器，基类通常选 MlpPolicy
         env, 
         policy_kwargs=policy_kwargs,
-        verbose=1,
-        learning_rate=3e-4,
+        verbose=0,
+        learning_rate=2e-4,
         gamma=0.999,      # 重要：针对 90s 长周期，Gamma 必须大
-        n_steps=2048,     # 每次更新采集的步数
-        batch_size=64,
-        ent_coef=0.01,    # 增加探索，防止 Agent 变“胆小”
-        device="cuda",
-        tensorboard_log=TENSORBOARD_LOG_DIR
+        n_steps=4096,     # 每次更新采集的步数
+        batch_size=128,
+        ent_coef=0.02,    # 增加探索，防止 Agent 变“胆小”
+        tensorboard_log="./sb3_logs/"
     )
     
     # --- 3. 训练模型 ---
-    train_callback = RewardAndEpisodeCallback(total_episodes=TOTAL_TRAINING_EPISODES, verbose=1)
+    # 使用新的回调函数，每 10 个 episode 可视化一次注意力
+    train_callback = AttentionVisualizationCallback(total_episodes=TOTAL_TRAINING_EPISODES, viz_freq=10, verbose=1)
     
     try:
         model.learn(
