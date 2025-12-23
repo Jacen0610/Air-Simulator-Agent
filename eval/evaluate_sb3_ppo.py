@@ -14,8 +14,10 @@ if project_root not in sys.path:
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import VecNormalize
-from stable_baselines3.common.env_util import make_vec_env
+# --- 导入手动包装所需的组件 ---
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.monitor import Monitor
+# --------------------------------
 import numpy as np
 import time
 
@@ -24,10 +26,6 @@ from env.gym_env import GymEnv # 导入正确的环境类名
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """
     为评估过程绘制奖励曲线，并确保 Y 轴清晰易读。
-
-    :param rewards: 包含每个 episode 奖励的列表。
-    :param title: 图表标题。
-    :param filename: 保存图表的文件路径。
     """
     if not rewards:
         print("没有可供绘制的奖励数据。")
@@ -70,7 +68,6 @@ def main():
     EVAL_EPISODES = 10
     
     # --- 使用基于项目根目录的绝对路径 ---
-    # 注意：这里的文件名需要与 train_sb3_ppo.py 中保存的文件名一致
     MODEL_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_ppo.zip")
     STATS_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_vec_normalize.pkl")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/eval") # 评估图表保存目录
@@ -90,15 +87,17 @@ def main():
 
     # --- 1. 创建环境并加载统计数据 ---
     print("正在初始化 Gym 环境并加载归一化统计数据...")
-    # 创建基础环境，并禁用 Monitor 的自动重置功能
-    eval_env = make_vec_env(
-        lambda: GymEnv(grpc_server_address='localhost:50051'),
-        n_envs=1,
-        monitor_kwargs={"auto_reset": False} # 禁用 Monitor 的自动重置
-    )
-    
-    # 加载 VecNormalize 统计数据并包装环境
-    env = VecNormalize.load(STATS_PATH, eval_env)
+    # --- 核心修正：手动创建和包装环境 ---
+    # 1. 创建原始环境
+    raw_env = GymEnv(grpc_server_address='localhost:50051')
+    # 2. 使用 Monitor 包装
+    monitored_env = Monitor(raw_env)
+    # 3. 转换为 VecEnv
+    vec_env = DummyVecEnv([lambda: monitored_env])
+    # 4. 使用 VecNormalize 加载统计数据
+    env = VecNormalize.load(STATS_PATH, vec_env)
+    # ------------------------------------
+
     # 设置为评估模式：不更新统计数据，并返回原始奖励
     env.training = False
     env.norm_reward = False
@@ -106,7 +105,6 @@ def main():
     # --- 2. 加载训练好的模型 ---
     print(f"正在从 {MODEL_PATH} 加载已训练的模型...")
     try:
-        # env=env 是必要的，因为模型需要知道它所训练的环境的结构
         model = PPO.load(MODEL_PATH, env=env)
     except Exception as e:
         print(f"加载模型时发生错误: {e}")
@@ -119,8 +117,8 @@ def main():
     eval_rewards = []
     
     for i in range(EVAL_EPISODES):
-        # 显式地重置环境，确保每个 episode 都从一个 reset 开始
-        obs = env.reset() 
+        # 显式地重置环境
+        obs = env.reset()
         episode_reward = 0.0
         step_count = 0
         done = False
@@ -128,10 +126,8 @@ def main():
         while not done:
             action, _ = model.predict(obs, deterministic=True)
             
-            # VecEnv 的 step 返回 4 个值: obs, reward, done, info
             obs, reward, done, info = env.step(action)
             
-            # is_done 标志现在直接来自 env.step() 的 done 数组
             is_done = done[0]
             step_reward = reward[0]
             
@@ -139,22 +135,15 @@ def main():
             step_count += 1
             
             if is_done:
-                # 当 is_done 为 True 时，表示当前 episode 结束
-                # 由于 Monitor 的 auto_reset=False，底层环境不会自动重置
-                # 我们将记录这个 episode 的奖励，并在下一个 for 循环中显式重置
                 break
         
-        # 记录当前 episode 的总奖励
-        # 注意：这里 episode_reward 累加的是 VecNormalize 缩放后的奖励
-        # 但由于 Monitor 的 auto_reset=False，info['episode'] 仍然会包含原始奖励
         if 'episode' in info[0]:
             original_episode_reward = info[0]['episode']['r']
             eval_rewards.append(original_episode_reward)
             print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {info[0]['episode']['l']}")
         else:
-            # 如果没有 'episode' 信息，说明可能在 episode 结束前循环中断，或者 Monitor 配置有问题
             print(f"Warning: Episode {i + 1} finished but 'episode' info not found. Using accumulated scaled reward: {episode_reward:.2f}")
-            eval_rewards.append(episode_reward) # 作为备用，记录缩放后的奖励
+            eval_rewards.append(episode_reward)
 
     # --- 4. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")

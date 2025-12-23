@@ -17,8 +17,10 @@ import time
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import VecNormalize
+# --- 导入手动包装所需的组件 ---
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.monitor import Monitor
+# --------------------------------
 from env.gym_env_for_lstm import GymEnvForLSTM
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
@@ -81,14 +83,20 @@ def main():
 
     # --- 1. 创建环境并加载模型 ---
     print("正在初始化为 LSTM 优化的 Gym 环境...")
-    # [核心修改] 使用 GymEnvForLSTM，并禁用 Monitor 的自动重置
-    vec_env = make_vec_env(
-        lambda: GymEnvForLSTM(grpc_server_address='localhost:50051'),
-        n_envs=1,
-        monitor_kwargs={"auto_reset": False} # 禁用 Monitor 的自动重置
-    )
-    # 使用 VecNormalize 加载统计数据
+    
+    # --- 核心修正：手动创建和包装环境，绕过 make_vec_env ---
+    # 1. 创建原始环境
+    raw_env = GymEnvForLSTM(grpc_server_address='localhost:50051')
+    # 2. 使用 Monitor 包装 (不自动重置)
+    #    注意：Monitor 在旧版本中没有 auto_reset，但其默认行为就是不自动重置
+    #    当 done=True 时，它会记录信息，但不会调用 reset()
+    monitored_env = Monitor(raw_env)
+    # 3. 转换为 VecEnv
+    vec_env = DummyVecEnv([lambda: monitored_env])
+    # 4. 使用 VecNormalize 加载统计数据
     env = VecNormalize.load(STATS_PATH, vec_env)
+    # ---------------------------------------------------------
+
     # 评估时不要更新统计数据
     env.training = False
     # 评估时也不要归一化奖励，以便看到真实的奖励值
@@ -111,7 +119,7 @@ def main():
         # 显式地重置环境
         obs = env.reset()
         
-        # [核心修改] RecurrentPPO 需要额外处理 lstm_states 和 episode_starts
+        # RecurrentPPO 需要额外处理 lstm_states 和 episode_starts
         lstm_states = None
         episode_starts = np.ones((1,), dtype=bool)
         
@@ -119,7 +127,7 @@ def main():
         episode_reward = 0
         step_count = 0
         while not done:
-            # [核心修改] 在 predict 调用中传递状态
+            # 在 predict 调用中传递状态
             action, lstm_states = model.predict(
                 obs, 
                 state=lstm_states, 
