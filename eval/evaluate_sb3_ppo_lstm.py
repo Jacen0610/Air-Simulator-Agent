@@ -84,18 +84,16 @@ def main():
     # --- 1. 创建环境并加载模型 ---
     print("正在初始化为 LSTM 优化的 Gym 环境...")
     
-    # --- 核心修正：手动创建和包装环境，绕过 make_vec_env ---
+    # --- 核心修正：手动创建和包装环境 ---
     # 1. 创建原始环境
     raw_env = GymEnvForLSTM(grpc_server_address='localhost:50051')
-    # 2. 使用 Monitor 包装 (不自动重置)
-    #    注意：Monitor 在旧版本中没有 auto_reset，但其默认行为就是不自动重置
-    #    当 done=True 时，它会记录信息，但不会调用 reset()
+    # 2. 使用 Monitor 包装 (在旧版本中，Monitor 默认不自动重置)
     monitored_env = Monitor(raw_env)
     # 3. 转换为 VecEnv
     vec_env = DummyVecEnv([lambda: monitored_env])
     # 4. 使用 VecNormalize 加载统计数据
     env = VecNormalize.load(STATS_PATH, vec_env)
-    # ---------------------------------------------------------
+    # ------------------------------------
 
     # 评估时不要更新统计数据
     env.training = False
@@ -115,45 +113,35 @@ def main():
     print(f"\n开始评估模型，共 {EVAL_EPISODES} 个 episodes...")
     
     eval_rewards = []
-    for i in range(EVAL_EPISODES):
-        # 显式地重置环境
-        obs = env.reset()
+    episodes_completed = 0
+    
+    # --- 核心修正：适配 VecEnv 的自动重置行为 ---
+    # 1. 在循环外只 reset 一次
+    obs = env.reset()
+    lstm_states = None
+    episode_starts = np.ones((1,), dtype=bool)
+    
+    # 2. 使用 while 循环，直到完成指定数量的 episodes
+    while episodes_completed < EVAL_EPISODES:
+        action, lstm_states = model.predict(
+            obs, 
+            state=lstm_states, 
+            episode_start=episode_starts,
+            deterministic=True
+        )
+        obs, reward, done, info = env.step(action)
         
-        # RecurrentPPO 需要额外处理 lstm_states 和 episode_starts
-        lstm_states = None
-        episode_starts = np.ones((1,), dtype=bool)
+        # 在 episode 的后续步骤中，episode_starts 应为 False
+        episode_starts = done
         
-        done = False
-        episode_reward = 0
-        step_count = 0
-        while not done:
-            # 在 predict 调用中传递状态
-            action, lstm_states = model.predict(
-                obs, 
-                state=lstm_states, 
-                episode_start=episode_starts,
-                deterministic=True
-            )
-            obs, reward, done, info = env.step(action)
-            
-            is_done = done[0]
-            step_reward = reward[0]
-            
-            episode_reward += step_reward
-            step_count += 1
-            # 在 episode 的后续步骤中，episode_starts 应为 False
-            episode_starts = np.zeros((1,), dtype=bool)
-            
-            if is_done:
-                break
-        
+        # 3. 检查 info 字典，看 VecEnv 是否自动重置了环境
         if 'episode' in info[0]:
+            episodes_completed += 1
             original_episode_reward = info[0]['episode']['r']
+            episode_length = info[0]['episode']['l']
+            
             eval_rewards.append(original_episode_reward)
-            print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {info[0]['episode']['l']}")
-        else:
-            print(f"Warning: Episode {i + 1} finished but 'episode' info not found. Using accumulated scaled reward: {episode_reward:.2f}")
-            eval_rewards.append(episode_reward)
+            print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {episode_length}")
 
     # --- 3. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
