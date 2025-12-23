@@ -90,8 +90,12 @@ def main():
 
     # --- 1. 创建环境并加载统计数据 ---
     print("正在初始化 Gym 环境并加载归一化统计数据...")
-    # 创建基础环境
-    eval_env = make_vec_env(lambda: GymEnv(grpc_server_address='localhost:50051'), n_envs=1)
+    # 创建基础环境，并禁用 Monitor 的自动重置功能
+    eval_env = make_vec_env(
+        lambda: GymEnv(grpc_server_address='localhost:50051'),
+        n_envs=1,
+        monitor_kwargs={"auto_reset": False} # 禁用 Monitor 的自动重置
+    )
     
     # 加载 VecNormalize 统计数据并包装环境
     env = VecNormalize.load(STATS_PATH, eval_env)
@@ -114,11 +118,9 @@ def main():
     
     eval_rewards = []
     
-    # VecEnv 只需要在开始时 reset 一次
-    # 之后每当 done=True 时，它会自动 reset 并返回新的 obs
-    obs = env.reset()
-    
     for i in range(EVAL_EPISODES):
+        # 显式地重置环境，确保每个 episode 都从一个 reset 开始
+        obs = env.reset() 
         episode_reward = 0.0
         step_count = 0
         done = False
@@ -129,8 +131,7 @@ def main():
             # VecEnv 的 step 返回 4 个值: obs, reward, done, info
             obs, reward, done, info = env.step(action)
             
-            # VecEnv 返回的是数组，我们需要取出标量值
-            # 即使是单个环境，done 也是 [bool]，reward 也是 [float]
+            # is_done 标志现在直接来自 env.step() 的 done 数组
             is_done = done[0]
             step_reward = reward[0]
             
@@ -138,13 +139,22 @@ def main():
             step_count += 1
             
             if is_done:
-                # 此时环境已经自动 reset 了，obs 是新的初始状态
-                # 我们只需要记录数据并跳出当前 episode 的循环
-                # 下一次 for 循环会直接使用这个新的 obs
+                # 当 is_done 为 True 时，表示当前 episode 结束
+                # 由于 Monitor 的 auto_reset=False，底层环境不会自动重置
+                # 我们将记录这个 episode 的奖励，并在下一个 for 循环中显式重置
                 break
         
-        eval_rewards.append(episode_reward)
-        print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {episode_reward:.2f} | Steps: {step_count}")
+        # 记录当前 episode 的总奖励
+        # 注意：这里 episode_reward 累加的是 VecNormalize 缩放后的奖励
+        # 但由于 Monitor 的 auto_reset=False，info['episode'] 仍然会包含原始奖励
+        if 'episode' in info[0]:
+            original_episode_reward = info[0]['episode']['r']
+            eval_rewards.append(original_episode_reward)
+            print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {info[0]['episode']['l']}")
+        else:
+            # 如果没有 'episode' 信息，说明可能在 episode 结束前循环中断，或者 Monitor 配置有问题
+            print(f"Warning: Episode {i + 1} finished but 'episode' info not found. Using accumulated scaled reward: {episode_reward:.2f}")
+            eval_rewards.append(episode_reward) # 作为备用，记录缩放后的奖励
 
     # --- 4. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")

@@ -1,4 +1,3 @@
-# evaluate_sb3_ppo_lstm.py
 import sys
 import os
 # --- 动态添加项目根目录到 sys.path ---
@@ -14,6 +13,7 @@ if project_root not in sys.path:
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import time
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
@@ -24,7 +24,6 @@ from env.gym_env_for_lstm import GymEnvForLSTM
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """
     为评估过程绘制奖励曲线。
-    (此函数与 evaluate_sb3_ppo.py 中的版本完全相同)
     """
     if not rewards:
         print("没有可供绘制的奖励数据。")
@@ -38,11 +37,11 @@ def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     plt.scatter(episodes, rewards, color='red', zorder=5)
 
     for i, reward in enumerate(rewards):
-        plt.text(episodes[i], reward, f' {reward:.2f}', va='center')
+        plt.text(episodes[i], reward, f' {reward:.2f}', va='center', ha='center')
 
     plt.title(title, fontsize=16)
     plt.xlabel("Episode", fontsize=12)
-    plt.ylabel("Total Reward", fontsize=12)
+    plt.ylabel("Total Original Reward", fontsize=12)
     
     plt.gca().xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
@@ -66,8 +65,7 @@ def main():
     # [核心修改] 指向 LSTM 模型文件
     MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm.zip")
     STATS_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_vec_normalize.pkl")
-    PLOT_FILENAME = os.path.join(PLOT_DIR, "evaluation_rewards_lstm.png")
-
+    
     # 检查模型文件是否存在
     if not os.path.exists(MODEL_PATH):
         print(f"错误：找不到模型文件 '{MODEL_PATH}'。")
@@ -83,9 +81,12 @@ def main():
 
     # --- 1. 创建环境并加载模型 ---
     print("正在初始化为 LSTM 优化的 Gym 环境...")
-    # [核心修改] 使用 GymEnvForLSTM，它提供模型所需的一维观测
-    # 使用 make_vec_env 创建矢量化环境
-    vec_env = make_vec_env(lambda: GymEnvForLSTM(), n_envs=1)
+    # [核心修改] 使用 GymEnvForLSTM，并禁用 Monitor 的自动重置
+    vec_env = make_vec_env(
+        lambda: GymEnvForLSTM(grpc_server_address='localhost:50051'),
+        n_envs=1,
+        monitor_kwargs={"auto_reset": False} # 禁用 Monitor 的自动重置
+    )
     # 使用 VecNormalize 加载统计数据
     env = VecNormalize.load(STATS_PATH, vec_env)
     # 评估时不要更新统计数据
@@ -107,6 +108,7 @@ def main():
     
     eval_rewards = []
     for i in range(EVAL_EPISODES):
+        # 显式地重置环境
         obs = env.reset()
         
         # [核心修改] RecurrentPPO 需要额外处理 lstm_states 和 episode_starts
@@ -126,20 +128,32 @@ def main():
             )
             obs, reward, done, info = env.step(action)
             
-            # VecEnv 返回的 reward 是一个数组
-            episode_reward += reward[0]
+            is_done = done[0]
+            step_reward = reward[0]
+            
+            episode_reward += step_reward
             step_count += 1
             # 在 episode 的后续步骤中，episode_starts 应为 False
             episode_starts = np.zeros((1,), dtype=bool)
+            
+            if is_done:
+                break
         
-        eval_rewards.append(episode_reward)
-        print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {episode_reward:.2f} | Steps: {step_count}")
+        if 'episode' in info[0]:
+            original_episode_reward = info[0]['episode']['r']
+            eval_rewards.append(original_episode_reward)
+            print(f"评估 Episode {i + 1}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {info[0]['episode']['l']}")
+        else:
+            print(f"Warning: Episode {i + 1} finished but 'episode' info not found. Using accumulated scaled reward: {episode_reward:.2f}")
+            eval_rewards.append(episode_reward)
 
     # --- 3. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
+    timestamp = int(time.time())
+    PLOT_FILENAME = os.path.join(PLOT_DIR, f"evaluation_rewards_lstm_{timestamp}.png")
     plot_evaluation_rewards(
         eval_rewards,
-        f"LSTM PPO Model Evaluation Rewards ({len(eval_rewards)} Episodes)",
+        f"LSTM PPO Model Evaluation Rewards (Avg: {np.mean(eval_rewards):.2f})",
         PLOT_FILENAME
     )
 
