@@ -4,63 +4,66 @@ from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 
-class AviationAttentionExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: spaces.Box, features_dim: int = 128, embed_dim: int = 64):
+class AviationTransformerExtractor(BaseFeaturesExtractor):
+    def __init__(self, observation_space: spaces.Box, features_dim: int = 128, embed_dim: int = 128):
         """
-        修改点说明：
-        1. 增加 embed_dim：将原始 8 维状态投影到更高维，利于 Multi-head Attention 捕捉复杂关系。
-        2. 结构优化：先进行特征嵌入，再进行位置编码。
+        针对12维异步状态空间优化的特征提取器
+        :param observation_space: 输入形状应为 (seq_len, 12)
+        :param features_dim: 输出给 PPO Actor/Critic 的维度 (推荐 128 或 256)
+        :param embed_dim: Transformer 内部投影维度 (推荐 128，对齐 4 头注意力)
         """
         super().__init__(observation_space, features_dim)
 
+        # 获取输入维度
+        # 此时输入 shape 应为 (Batch, Seq_Len, 12)
         self.seq_len = observation_space.shape[0]
         self.state_dim = observation_space.shape[1]
-        self.embed_dim = embed_dim  # 推荐设为 32 或 64
+        self.embed_dim = embed_dim
+        num_heads = 4  # 128 维度平分给 4 个头，每个头处理 32 维，计算效率最高
 
-        # [修改 1] 输入特征投影层：将 8 维特征映射到 embed_dim
-        # 理由：原始特征如“等待秒数”和“忙碌标志”量级差异大，投影后更利于注意力机制收敛
-        self.input_embedding = nn.Sequential(
+        # 1. 初始投影层 (Input Embedding)
+        # 将 12 维物理量投影到 128 维语义空间
+        self.input_projection = nn.Sequential(
             nn.Linear(self.state_dim, self.embed_dim),
+            nn.LayerNorm(self.embed_dim),
             nn.ReLU()
         )
 
-        # [修改 2] 位置编码维度适配 embed_dim
+        # 2. 位置嵌入 (Positional Embedding)
+        # 学习序列中每个时刻的时间顺序关系
         self.pos_embedding = nn.Parameter(th.randn(1, self.seq_len, self.embed_dim))
 
-        # [修改 3] 多头注意力：使用 embed_dim 进行计算
-        num_heads = 4  # 增加头数以同时监控微观和宏观规律
-        self.attention = nn.MultiheadAttention(
-            embed_dim=self.embed_dim,
-            num_heads=num_heads,
+        # 3. Transformer Encoder 层 (两层结构)
+        # 相比单层 Attention，标准 Encoder Block 包含 FFN 层，能更好模拟非线性信道规律
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.embed_dim,
+            nhead=num_heads,
+            dim_feedforward=self.embed_dim * 2,  # 隐含层扩大
+            dropout=0.1,
+            activation='relu',
             batch_first=True
         )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=2)
 
-        self.layernorm = nn.LayerNorm(self.embed_dim)
-
-        # [修改 4] 最终 MLP 的输入维度适配 embed_dim
-        self.flat_out = nn.Sequential(
+        # 4. 最终输出层 (Flatten -> Output)
+        # 将 (Batch, Seq_Len, Embed_Dim) 转换为 (Batch, Features_Dim)
+        self.output_head = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.embed_dim * self.seq_len, features_dim),
+            nn.LayerNorm(features_dim),
             nn.ReLU()
         )
 
-        self.last_attn_weights = None
-
     def forward(self, observations: th.Tensor) -> th.Tensor:
-        # observations shape: (batch_size, seq_len, state_dim)
+        # 1. 特征投影 (B, L, 12) -> (B, L, 128)
+        x = self.input_projection(observations)
 
-        # [修改 5] 先投影再加位置编码
-        x = self.input_embedding(observations)  # (B, L, embed_dim)
+        # 2. 注入位置信息
         x = x + self.pos_embedding
 
-        # [修改 6] 获取权重用于科研分析
-        # 在航空场景中，我们最关心序列最后一个 step 对历史的关注度
-        attn_output, attn_weights = self.attention(x, x, x, need_weights=True)
+        # 3. Transformer 特征提取 (自注意力计算)
+        # 自动学习 1s/0.1s ratio 与 wait_time、dt_step 之间的因果关系
+        x = self.transformer_encoder(x)
 
-        if not self.training:
-            # 提取最后一行权重：即“当前决策时刻”对“历史所有时刻”的关注度
-            # 形状通常为 (batch, seq_len, seq_len)，我们取最后一个 query
-            self.last_attn_weights = attn_weights.detach().cpu().numpy()[0, -1, :]
-
-        x = self.layernorm(x + attn_output)
-        return self.flat_out(x)
+        # 4. 输出给 PPO
+        return self.output_head(x)
