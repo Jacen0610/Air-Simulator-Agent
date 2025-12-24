@@ -35,7 +35,7 @@ class GymEnvForLSTM(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(self.go_env.state_dim,),  # 形状是 (8,) 而不是 (10, 8)
+            shape=(self.go_env.state_dim,),  # 形状是 (12,) 而不是 (10, 12)
             dtype=np.float32
         )
 

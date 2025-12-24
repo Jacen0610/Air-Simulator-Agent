@@ -30,7 +30,7 @@ class GymEnv(gym.Env):
 
         # 定义观测空间
         # GoSimulatorEnv 返回一个形状为 (sequence_length, state_dim) 的 numpy 数组
-        # state_dim 会从 go_env 自动获取 (当前是 8)
+        # state_dim 会从 go_env 自动获取 (当前是 12)
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,

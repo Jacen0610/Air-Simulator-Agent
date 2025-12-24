@@ -11,8 +11,8 @@ import proto.simulator_pb2_grpc as simulator_pb2_grpc
 
 class GoSimulatorEnv:
     """
-    [2024-05-24 更新] 封装 Go 模拟器 gRPC 服务的强化学习环境。
-    此版本适配了包含8个特征的 protobuf 定义。
+    [2024-05-26 更新] 封装 Go 模拟器 gRPC 服务的强化学习环境。
+    此版本适配了包含12个特征的 protobuf 定义。
     """
     def __init__(self, grpc_server_address='localhost:50051', sequence_length=10):
         self.grpc_server_address = grpc_server_address
@@ -20,7 +20,7 @@ class GoSimulatorEnv:
         self.stub = None
         
         # [核心修改] 状态维度现在与 proto 文件中的 AgentObservation 字段数量完全对应
-        self.state_dim = 8 
+        self.state_dim = 12 
         self.action_dim = 2
         
         self.sequence_length = sequence_length
@@ -56,14 +56,18 @@ class GoSimulatorEnv:
         顺序与 simulator.proto 文件中的定义严格一致。
         """
         obs_vector = np.array([
-            proto_obs.is_channel_busy,
-            proto_obs.has_data_to_send,
-            proto_obs.outbound_queue_length,
-            proto_obs.top_message_wait_time_seconds,
-            proto_obs.consecutive_idle_steps,
-            proto_obs.last_send_caused_collision,
-            proto_obs.steps_since_last_collision,
-            proto_obs.channel_busy_ratio,
+            proto_obs.has_data,
+            proto_obs.is_busy,
+            proto_obs.busy_dur,
+            proto_obs.idle_dur,
+            proto_obs.ratio_1s,
+            proto_obs.ratio_01s,
+            proto_obs.wait_time,
+            proto_obs.q_size,
+            proto_obs.last_act,
+            proto_obs.is_coll,
+            proto_obs.cycle_pos,
+            proto_obs.dt_step,
         ], dtype=np.float32)
         return obs_vector
 
