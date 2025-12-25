@@ -78,7 +78,7 @@ def main():
     model = PPO(
         "MlpPolicy",
         env,
-        n_steps=4096,
+        n_steps=16384,
         verbose=0,
         tensorboard_log=TENSORBOARD_LOG_DIR,
         learning_rate=3e-5,      

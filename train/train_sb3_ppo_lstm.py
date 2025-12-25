@@ -82,7 +82,7 @@ def main():
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
-    TENSORBOARD_LOG_DIR = os.path.join(project_root, "recurrent_ppo_lstm_tensorboard_sb3")
+    TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs")
     
     MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm.zip")
     STATS_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_vec_normalize.pkl")

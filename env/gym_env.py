@@ -3,80 +3,54 @@ from gymnasium import spaces
 import numpy as np
 from env.go_simulator_env import GoSimulatorEnv
 
+
 class GymEnv(gym.Env):
-    """
-    一个封装了 GoSimulatorEnv 的 Gymnasium 环境，使其符合标准的 RL 接口。
-    """
     metadata = {'render_modes': []}
 
-    def __init__(self, grpc_server_address='localhost:50051', sequence_length=10):
-        """
-        初始化 Gymnasium 环境。
-
-        :param grpc_server_address: gRPC 服务器的地址。
-        :param sequence_length: 观测历史的长度。
-        """
+    def __init__(self, grpc_server_address='localhost:50051', sequence_length=32):  # 建议对齐 Transformer 的 32
         super().__init__()
 
-        # 内部实例化底层环境
+        # 1. 明确 sequence_length
+        self.sequence_length = sequence_length
+
         self.go_env = GoSimulatorEnv(
             grpc_server_address=grpc_server_address,
             sequence_length=sequence_length
         )
 
-        # 定义动作空间
-        # 根据 .proto 文件，我们有两个离散动作: ACTION_WAIT (0) 和 ACTION_SEND (1)
         self.action_space = spaces.Discrete(self.go_env.action_dim)
 
-        # 定义观测空间
-        # GoSimulatorEnv 返回一个形状为 (sequence_length, state_dim) 的 numpy 数组
-        # state_dim 会从 go_env 自动获取 (当前是 12)
+        # 2. 观测空间声明（确保 dtype 严格为 float32）
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(sequence_length, self.go_env.state_dim),
+            shape=(self.sequence_length, self.go_env.state_dim),
             dtype=np.float32
         )
 
     def reset(self, seed=None, options=None):
-        """
-        重置环境并返回初始观测。
-        """
-        # Gymnasium 的 reset 支持可选的 seed 和 options，我们暂时用不到
+        # 传递 seed 给底层随机数生成器（如果有的话）
         super().reset(seed=seed)
 
-        # 调用底层环境的 reset
+        # 如果 GoSimulatorEnv 支持 seed，建议传入
+        # initial_observation = self.go_env.reset(seed=seed)
         initial_observation = self.go_env.reset()
 
-        # Gymnasium 的 reset 返回 (observation, info)
-        info = {}
-        return initial_observation, info
+        return np.array(initial_observation, dtype=np.float32), {}
 
     def step(self, action):
-        """
-        在环境中执行一步。
-        """
-        # 调用底层环境的 step
         observation, reward, done, info = self.go_env.step(action)
 
-        # Gymnasium 的 step 返回五元组: obs, reward, terminated, truncated, info
-        # 在我们的场景中，'done' 同时代表 terminated
+        # 3. 奖励缩放（在这里做最后的保险）
+        # 如果你在 Go 端改了 Log，这里可以除以 10 或者不除
+        # reward = reward / 10.0
+
+        # 4. 区分 Terminated 和 Truncated
+        # 假设 info 中包含了步数信息，或者由 Python 端计数
         terminated = done
-        truncated = False # 根据 SB3 的建议，通常只在因为时间限制等外部因素结束时才为 True
+        truncated = info.get("time_out", False)  # 确保 Go 端能识别 40 分钟到期的情形
 
-        return observation, reward, terminated, truncated, info
-
-    def close(self):
-        """
-        关闭环境并清理资源。
-        """
-        self.go_env.close()
-
-    def render(self):
-        """
-        由于这是一个模拟器环境，没有可视化界面，所以 render 是一个空操作。
-        """
-        pass
+        return np.array(observation, dtype=np.float32), float(reward), terminated, truncated, info
 
 if __name__ == '__main__':
     # 提供一个简单的示例，展示如何使用这个 Gym 环境
