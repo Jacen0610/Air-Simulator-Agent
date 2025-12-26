@@ -125,15 +125,15 @@ def main():
         env,
         policy_kwargs=policy_kwargs,
         verbose=1,
-        learning_rate=5e-5,  # 推荐值
+        learning_rate=1e-5,  # 推荐值
         gamma=0.999,  # 针对长周期
         n_steps=16384,  # 每次更新采集的样本量
-        batch_size=1024, # 增加 Batch 以平滑碰撞脉冲
-        n_epochs=10, # 每次更新迭代10遍
-        ent_coef=0.01,  # 稍作降低，让模型更聚焦于已发现的空隙
+        batch_size=2048, # 增加 Batch 以平滑碰撞脉冲
+        n_epochs=5, # 每次更新迭代10遍
+        ent_coef=0.0005,  # 稍作降低，让模型更聚焦于已发现的空隙
         gae_lambda=0.98,
-        clip_range=0.2,
-        max_grad_norm=0.3,
+        clip_range=0.1,
+        max_grad_norm=0.1,
         device="cuda",
         tensorboard_log="./sb3_logs/"
     )
