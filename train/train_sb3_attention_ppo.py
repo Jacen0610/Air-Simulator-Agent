@@ -93,6 +93,7 @@ def main():
     SEQUENCE_LENGTH = 32
     FEATURES_DIM = 256  # Transformer 输出的特征向量长度
     EMBED_DIM = 128  # 内部 Embedding 维度
+    GAMMA = 0.98
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
@@ -106,7 +107,7 @@ def main():
     ), n_envs=1)
 
     # 注意：对于异步时间 delta，建议开启 clip_obs 以增强稳定性
-    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.999)
+    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
 
     # --- 3. 定义 Transformer-PPO 策略参数 ---
     policy_kwargs = dict(
@@ -124,9 +125,9 @@ def main():
         "MlpPolicy",
         env,
         policy_kwargs=policy_kwargs,
-        verbose=1,
+        verbose=0,
         learning_rate=1e-5,  # 推荐值
-        gamma=0.999,  # 针对长周期
+        gamma=GAMMA,  # 针对长周期
         n_steps=16384,  # 每次更新采集的样本量
         batch_size=2048, # 增加 Batch 以平滑碰撞脉冲
         n_epochs=5, # 每次更新迭代10遍
@@ -134,6 +135,7 @@ def main():
         gae_lambda=0.98,
         clip_range=0.1,
         max_grad_norm=0.1,
+        vf_coef=1.0,
         device="cuda",
         tensorboard_log="./sb3_logs/"
     )
