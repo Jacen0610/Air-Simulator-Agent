@@ -28,7 +28,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 100  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    TOTAL_EPISODES = 50  # TEA 结构较深，建议多跑一些 Episode 观察收敛
     GAMMA = 0.95
     SEQUENCE_LENGTH = 32
 
@@ -65,12 +65,16 @@ def main():
         verbose=1,
         learning_rate=1e-5,
         gamma=GAMMA,
-        n_steps=8192,  # 减小 n_steps 以便更频繁地更新 LSTM 权重
-        batch_size=1024,  # 配合 GPU 显存
-        n_epochs=5,  # 有了 TEA 过滤，可以适当增加迭代次数
-        gae_lambda=0.9,  # 略微提高，平衡偏差与方差
-        vf_coef=0.1,  # 保持对 Critic 的保护
-        ent_coef=0.001,  # 稍微增加一点探索，防止无效动作过早归零
+        # --- 核心对齐参数 ---
+        n_steps=16384,  # 改回 16384，匹配 Transformer 的采样长度
+        batch_size=2048,  # 改回 2048，利用 4080s 算力，获得更稳健的梯度
+        n_epochs=1,  # 严格对比实验设为 1；若追求极限性能可后续改为 5
+        clip_range=0.1,  # 强制限制策略更新幅度，压制无效动作
+        max_grad_norm=0.1,  # 梯度裁剪，防止碰撞脉冲破坏权重
+        # ------------------
+        gae_lambda=0.9,
+        vf_coef=0.1,
+        ent_coef=0.0005,
         device="cuda",
         tensorboard_log="./sb3_logs/tea_ppo/"
     )

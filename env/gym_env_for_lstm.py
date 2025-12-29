@@ -14,17 +14,18 @@ class GymEnvForLSTM(gym.Env):
     """
     metadata = {'render_modes': []}
 
-    def __init__(self, grpc_server_address='localhost:50051'):
+    def __init__(self, grpc_server_address='localhost:50051', sequence_length=32):
         """
         初始化环境。
         """
         super().__init__()
+        self.sequence_length = sequence_length
 
         # 内部实例化底层的 Go 环境。
         # 注意：我们仍然需要它内部维护一个序列，但我们只取最新的观测。
         self.go_env = GoSimulatorEnv(
             grpc_server_address=grpc_server_address,
-            sequence_length=10  # 这个值需要与底层环境的默认值匹配
+            sequence_length=sequence_length  # 这个值需要与底层环境的默认值匹配
         )
 
         # 定义动作空间 (保持不变)

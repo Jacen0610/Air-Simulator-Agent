@@ -89,6 +89,7 @@ def main():
     # --- 配置 ---
     TRAIN_EPISODES = 50
     GAMMA = 0.95
+    SEQUENCE_LENGTH = 32
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
@@ -104,7 +105,7 @@ def main():
     # --- 1. 创建并封装环境 ---
     print("正在初始化为 LSTM 优化的 Gym 环境并应用归一化...")
     # 使用 make_vec_env 创建矢量化环境
-    vec_env = make_vec_env(lambda: GymEnvForLSTM(grpc_server_address=grpc_address), n_envs=1)
+    vec_env = make_vec_env(lambda: GymEnvForLSTM(grpc_server_address=grpc_address, sequence_length=SEQUENCE_LENGTH), n_envs=1)
     # 使用 VecNormalize 包装器来归一化观测值和奖励
     env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
 
