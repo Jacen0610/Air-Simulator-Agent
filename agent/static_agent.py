@@ -31,10 +31,8 @@ class CSMAAgent:
 
         # [核心修改] 从状态向量中提取所需信息，使用新的索引约定
         # 根据 simulator.proto:
-        # 0: is_channel_busy
-        # 1: has_data_to_send
-        is_channel_busy = current_state[0] > 0.5
-        has_data_to_send = current_state[1] > 0.5
+        is_channel_busy = current_state[1] > 0.5
+        has_data_to_send = current_state[0] > 0.5
 
         # 如果没有消息要发送，必须等待
         if not has_data_to_send:
