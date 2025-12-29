@@ -1,5 +1,7 @@
 import sys
 import os
+import argparse # 导入 argparse
+
 # --- 动态添加项目根目录到 sys.path ---
 # 获取当前脚本的绝对路径
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -63,12 +65,19 @@ def plot_rewards(rewards, filename):
 
 # --- 主训练函数 ---
 def main():
+    # --- 解析命令行参数 ---
+    parser = argparse.ArgumentParser(description='Train SB3 PPO Agent')
+    parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC server port (default: 50051)')
+    args = parser.parse_args()
+    grpc_address = f'localhost:{args.grpc_port}'
+    print(f"Using gRPC server address: {grpc_address}")
+
     # --- 训练设置 ---
     TOTAL_TRAINING_EPISODES = 50 
-    TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs") # 使用绝对路径
+    TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs/mlp_ppo/") # 使用绝对路径
     
     # --- 核心改动：创建并包装环境以进行归一化 ---
-    vec_env = make_vec_env(lambda: GymEnv(grpc_server_address='localhost:50051'), n_envs=1)
+    vec_env = make_vec_env(lambda: GymEnv(grpc_server_address=grpc_address), n_envs=1)
     env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.99)
 
     # 创建回调实例

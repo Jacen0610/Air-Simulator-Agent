@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse # 导入 argparse
 
 # --- 动态添加项目根目录 ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -88,6 +89,13 @@ def plot_rewards(rewards, filename):
 
 
 def main():
+    # --- 解析命令行参数 ---
+    parser = argparse.ArgumentParser(description='Train SB3 Transformer PPO Agent')
+    parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC server port (default: 50051)')
+    args = parser.parse_args()
+    grpc_address = f'localhost:{args.grpc_port}'
+    print(f"Using gRPC server address: {grpc_address}")
+
     # --- 1. 核心参数设置 ---
     TOTAL_TRAINING_EPISODES = 50  # Transformer 需要略多一点的训练量
     SEQUENCE_LENGTH = 32
@@ -102,7 +110,7 @@ def main():
 
     # --- 2. 环境初始化 (12 维状态已经在 GymEnv 中适配) ---
     vec_env = make_vec_env(lambda: GymEnv(
-        grpc_server_address='localhost:50051',
+        grpc_server_address=grpc_address,
         sequence_length=SEQUENCE_LENGTH
     ), n_envs=1)
 
@@ -137,7 +145,7 @@ def main():
         max_grad_norm=0.1,
         vf_coef=0.1,
         device="cuda",
-        tensorboard_log="./sb3_logs/"
+        tensorboard_log="./sb3_logs/transformer_ppo/"
     )
 
     train_callback = AttentionVisualizationCallback(

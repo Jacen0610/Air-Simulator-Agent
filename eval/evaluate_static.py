@@ -3,6 +3,7 @@ import numpy as np
 import time
 import os
 import sys
+import argparse # 导入 argparse
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
@@ -63,7 +64,15 @@ def evaluate():
     """
     加载静态CSMA智能体，运行多个episode，并记录和绘制性能。
     """
-    env = GoSimulatorEnv(sequence_length=SEQUENCE_LENGTH)
+    # --- 解析命令行参数 ---
+    parser = argparse.ArgumentParser(description='Evaluate Static CSMA Agent')
+    parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC server port (default: 50051)')
+    args = parser.parse_args()
+    grpc_address = f'localhost:{args.grpc_port}'
+    print(f"Using gRPC server address: {grpc_address}")
+
+    # 初始化环境时传入 gRPC 地址
+    env = GoSimulatorEnv(grpc_server_address=grpc_address, sequence_length=SEQUENCE_LENGTH)
     agent = CSMAAgent(p_value=P_VALUE)
 
     eval_rewards = [] # [修改] 使用更明确的变量名

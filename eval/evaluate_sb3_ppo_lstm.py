@@ -1,5 +1,7 @@
 import sys
 import os
+import argparse # 导入 argparse
+
 # --- 动态添加项目根目录到 sys.path ---
 # 获取当前脚本的绝对路径
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +60,13 @@ def main():
     """
     主评估流程 - 专门用于 RecurrentPPO (LSTM) 模型。
     """
+    # --- 解析命令行参数 ---
+    parser = argparse.ArgumentParser(description='Evaluate SB3 Recurrent PPO Agent')
+    parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC server port (default: 50051)')
+    args = parser.parse_args()
+    grpc_address = f'localhost:{args.grpc_port}'
+    print(f"Using gRPC server address: {grpc_address}")
+
     # --- 配置 ---
     EVAL_EPISODES = 10
     # --- 使用绝对路径 ---
@@ -86,7 +95,7 @@ def main():
     
     # --- 核心修正：手动创建和包装环境 ---
     # 1. 创建原始环境
-    raw_env = GymEnvForLSTM(grpc_server_address='localhost:50051')
+    raw_env = GymEnvForLSTM(grpc_server_address=grpc_address)
     # 2. 使用 Monitor 包装 (在旧版本中，Monitor 默认不自动重置)
     monitored_env = Monitor(raw_env)
     # 3. 转换为 VecEnv
@@ -123,8 +132,9 @@ def main():
     
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
+        norm_obs = env.normalize_obs(obs)
         action, lstm_states = model.predict(
-            obs, 
+            norm_obs,
             state=lstm_states, 
             episode_start=episode_starts,
             deterministic=True

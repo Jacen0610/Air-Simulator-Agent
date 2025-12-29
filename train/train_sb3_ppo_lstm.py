@@ -1,5 +1,7 @@
 import sys
 import os
+import argparse # 导入 argparse
+
 # --- 动态添加项目根目录到 sys.path ---
 # 获取当前脚本的绝对路径
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -77,12 +79,19 @@ def main():
     """
     主训练流程 - RecurrentPPO (带归一化)。
     """
+    # --- 解析命令行参数 ---
+    parser = argparse.ArgumentParser(description='Train SB3 Recurrent PPO Agent')
+    parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC server port (default: 50051)')
+    args = parser.parse_args()
+    grpc_address = f'localhost:{args.grpc_port}'
+    print(f"Using gRPC server address: {grpc_address}")
+
     # --- 配置 ---
     TRAIN_EPISODES = 50
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
-    TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs")
+    TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs/lstm_ppo/")
     
     MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm.zip")
     STATS_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm_vec_normalize.pkl")
@@ -94,7 +103,7 @@ def main():
     # --- 1. 创建并封装环境 ---
     print("正在初始化为 LSTM 优化的 Gym 环境并应用归一化...")
     # 使用 make_vec_env 创建矢量化环境
-    vec_env = make_vec_env(lambda: GymEnvForLSTM(grpc_server_address='localhost:50051'), n_envs=1)
+    vec_env = make_vec_env(lambda: GymEnvForLSTM(grpc_server_address=grpc_address), n_envs=1)
     # 使用 VecNormalize 包装器来归一化观测值和奖励
     env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.99)
 
