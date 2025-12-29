@@ -73,12 +73,13 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 训练设置 ---
-    TOTAL_TRAINING_EPISODES = 50 
+    TOTAL_TRAINING_EPISODES = 50
+    GAMMA = 0.95
     TENSORBOARD_LOG_DIR = os.path.join(project_root, "sb3_logs/mlp_ppo/") # 使用绝对路径
     
     # --- 核心改动：创建并包装环境以进行归一化 ---
     vec_env = make_vec_env(lambda: GymEnv(grpc_server_address=grpc_address), n_envs=1)
-    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.99)
+    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
 
     # 创建回调实例
     reward_callback = RewardAndEpisodeCallback(total_episodes=TOTAL_TRAINING_EPISODES, verbose=1)
@@ -87,17 +88,25 @@ def main():
     model = PPO(
         "MlpPolicy",
         env,
-        n_steps=16384,
         verbose=0,
+        learning_rate=1e-5,  # 推荐值
+        gamma=GAMMA,  # 针对长周期
+        n_steps=16384,  # 每次更新采集的样本量
+        batch_size=2048,  # 增加 Batch 以平滑碰撞脉冲
+        n_epochs=1,  # 每次更新迭代10遍
+        ent_coef=0.0005,  # 稍作降低，让模型更聚焦于已发现的空隙
+        gae_lambda=0.8,
+        clip_range=0.1,
+        max_grad_norm=0.1,
+        vf_coef=0.1,
+        device="cuda",
         tensorboard_log=TENSORBOARD_LOG_DIR,
-        learning_rate=3e-5,      
-        max_grad_norm=0.5        
     )
     
     # 训练模型
     try:
         model.learn(
-            total_timesteps=int(1e9),
+            total_timesteps=int(1e12),
             callback=reward_callback,
             tb_log_name="PPO_GymEnv_Normalized"
         )

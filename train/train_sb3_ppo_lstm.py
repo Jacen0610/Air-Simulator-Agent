@@ -88,6 +88,7 @@ def main():
 
     # --- 配置 ---
     TRAIN_EPISODES = 50
+    GAMMA = 0.95
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
@@ -105,7 +106,7 @@ def main():
     # 使用 make_vec_env 创建矢量化环境
     vec_env = make_vec_env(lambda: GymEnvForLSTM(grpc_server_address=grpc_address), n_envs=1)
     # 使用 VecNormalize 包装器来归一化观测值和奖励
-    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=0.99)
+    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
 
     # --- 2. 定义并训练模型 ---
     print(f"开始使用 RecurrentPPO 进行训练，目标为 {TRAIN_EPISODES} 个 episodes...")
@@ -119,13 +120,19 @@ def main():
     model = RecurrentPPO(
         "MlpLstmPolicy",
         env,
-        policy_kwargs=policy_kwargs,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        learning_rate=1e-4,
         verbose=0,
+        policy_kwargs=policy_kwargs,
+        learning_rate=1e-5,  # 推荐值
+        gamma=GAMMA,  # 针对长周期
+        n_steps=16384,  # 每次更新采集的样本量
+        batch_size=2048,  # 增加 Batch 以平滑碰撞脉冲
+        n_epochs=1,  # 每次更新迭代10遍
+        ent_coef=0.0005,  # 稍作降低，让模型更聚焦于已发现的空隙
+        gae_lambda=0.8,
+        clip_range=0.1,
+        max_grad_norm=0.1,
+        vf_coef=0.1,
+        device="cuda",
         tensorboard_log=TENSORBOARD_LOG_DIR
     )
 
