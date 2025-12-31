@@ -1,6 +1,7 @@
 # 文件路径: train_sb3_tea_ppo.py
 import os, sys
 import argparse # 导入 argparse
+from typing import Callable
 
 # --- 动态添加项目根目录 ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,9 +29,9 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 50  # TEA 结构较深，建议多跑一些 Episode 观察收敛
-    GAMMA = 0.95
-    SEQUENCE_LENGTH = 32
+    TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    GAMMA = 0.99
+    SEQUENCE_LENGTH = 16
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
@@ -57,26 +58,41 @@ def main():
         net_arch=dict(pi=[128, 64], vf=[128, 64])
     )
 
+    def linear_schedule(initial_value: float) -> Callable[[float], float]:
+        """
+        线性学习率调度器。
+        :param initial_value: 初始学习率。
+        :return: 学习率调度函数。
+        """
+
+        def func(progress_remaining: float) -> float:
+            """
+            progress_remaining 从 1.0 减少到 0.0。
+            """
+            return progress_remaining * initial_value
+
+        return func
+
+    # 使用你建议的起始学习率
+    initial_lr = 3e-4
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
         env,
         policy_kwargs=policy_kwargs,
-        verbose=0,
-        learning_rate=1e-5,
-        gamma=GAMMA,
-        # --- 核心对齐参数 ---
-        n_steps=16384,  # 改回 16384，匹配 Transformer 的采样长度
-        batch_size=2048,  # 改回 2048，利用 4080s 算力，获得更稳健的梯度
-        n_epochs=1,  # 严格对比实验设为 1；若追求极限性能可后续改为 5
-        clip_range=0.1,  # 强制限制策略更新幅度，压制无效动作
-        max_grad_norm=0.1,  # 梯度裁剪，防止碰撞脉冲破坏权重
-        # ------------------
-        gae_lambda=0.9,
-        vf_coef=0.1,
+        verbose=1,
+        learning_rate=linear_schedule(initial_lr),  # 这里应用线性衰减
+        gamma=0.99,  # 锁定 0.99 以解决长程死等
+        n_steps=2048,  # 增加更新频率
+        batch_size=256,  # 适配 FPS
+        n_epochs=10,  # 充分利用每批数据
+        clip_range=0.2,
+        gae_lambda=0.95,  # 配合 gamma 0.99 的优势估计优化
         ent_coef=0.0005,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
         device="cuda",
-        tensorboard_log="./sb3_logs/tea_ppo/"
+        tensorboard_log="./sb3_logs/tea_ppo_v2/"
     )
 
     callback = AttentionVisualizationCallback(total_episodes=TOTAL_EPISODES, viz_freq=20, verbose=1)
