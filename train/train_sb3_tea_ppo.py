@@ -29,7 +29,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    TOTAL_EPISODES = 20  # TEA 结构较深，建议多跑一些 Episode 观察收敛
     GAMMA = 0.99
     SEQUENCE_LENGTH = 16
 
@@ -74,25 +74,25 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 3e-4
+    initial_lr = 1e-4
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
         env,
         policy_kwargs=policy_kwargs,
-        verbose=1,
+        verbose=0,
         learning_rate=linear_schedule(initial_lr),  # 这里应用线性衰减
         gamma=0.99,  # 锁定 0.99 以解决长程死等
         n_steps=2048,  # 增加更新频率
         batch_size=256,  # 适配 FPS
-        n_epochs=10,  # 充分利用每批数据
-        clip_range=0.2,
+        n_epochs=4,  # 充分利用每批数据
+        clip_range=0.1,
         gae_lambda=0.95,  # 配合 gamma 0.99 的优势估计优化
-        ent_coef=0.0005,
-        vf_coef=0.5,
+        ent_coef=0.005,
+        vf_coef=0.1,
         max_grad_norm=0.5,
         device="cuda",
-        tensorboard_log="./sb3_logs/tea_ppo_v2/"
+        tensorboard_log="./sb3_logs/tea_ppo/train/"
     )
 
     callback = AttentionVisualizationCallback(total_episodes=TOTAL_EPISODES, viz_freq=20, verbose=1)
