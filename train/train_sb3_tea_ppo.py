@@ -85,8 +85,8 @@ def main():
         print("TEA-PPO 训练启动: Attention 过滤 + LSTM 记忆...")
         model.learn(total_timesteps=int(1e12), callback=callback, tb_log_name="TEA_PPO_v1")
     finally:
-        model.save(os.path.join(MODEL_DIR,"models/tea_ppo_final"))
-        env.save(os.path.join(MODEL_DIR,"models/tea_ppo_vec_norm.pkl"))
+        model.save(os.path.join(MODEL_DIR,"tea_ppo_final"))
+        env.save(os.path.join(MODEL_DIR,"tea_ppo_vec_norm.pkl"))
         env.close()
 
 
