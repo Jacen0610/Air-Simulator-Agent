@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import time
 import torch as th # 导入 torch
-from collections import namedtuple # 导入 namedtuple
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
@@ -27,9 +26,6 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure # 导入 logger 配置
 # --------------------------------
 from env.gym_env_for_lstm import GymEnvForLSTM
-
-# 定义 RNNStates 以匹配 sb3_contrib 的期望结构
-RNNStates = namedtuple("RNNStates", ("pi", "vf"))
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """
@@ -61,38 +57,6 @@ def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     plt.savefig(filename)
     print(f"评估奖励图表已保存至: {filename}")
     plt.close()
-
-def to_rnn_states(lstm_states, n_layers, hidden_size, device):
-    """
-    辅助函数：将 numpy tuple 状态或 None 转换为 RNNStates 对象 (包含 Tensor)。
-    """
-    if lstm_states is None:
-        # 初始化全零状态: (n_lstm_layers, batch_size, hidden_size)
-        # batch_size = 1
-        h = th.zeros(n_layers, 1, hidden_size).to(device)
-        c = th.zeros(n_layers, 1, hidden_size).to(device)
-        # 假设 actor 和 critic 使用独立的 LSTM (默认配置)
-        return RNNStates(pi=(h, c), vf=(h, c))
-    
-    # lstm_states 是 numpy array 的 tuple
-    # 转换为 tensors
-    states_tensors = [th.as_tensor(s).to(device) for s in lstm_states]
-    
-    # 根据 tuple 长度判断结构
-    # 通常 RecurrentPPO 返回 (h_pi, c_pi, h_vf, c_vf)
-    if len(states_tensors) == 4:
-        return RNNStates(
-            pi=(states_tensors[0], states_tensors[1]),
-            vf=(states_tensors[2], states_tensors[3])
-        )
-    elif len(states_tensors) == 2:
-        # 可能是共享 LSTM
-        return RNNStates(
-            pi=(states_tensors[0], states_tensors[1]),
-            vf=(states_tensors[0], states_tensors[1])
-        )
-    else:
-        raise ValueError(f"Unexpected lstm_states length: {len(states_tensors)}")
 
 def main():
     """
@@ -181,68 +145,30 @@ def main():
     lstm_states = None
     episode_starts = np.ones((1,), dtype=bool)
     
-    # 用于收集每个 episode 的统计数据
-    episode_values = []
-    episode_entropies = []
-
-    # 获取 LSTM 参数以进行手动初始化
-    lstm_hidden_size = model.policy.lstm_hidden_size
-    n_lstm_layers = model.policy.n_lstm_layers
-    
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
         total_steps += 1 # 步数 +1
         
-        # 1. 先预测动作 (同时获取下一个 LSTM 状态)
+        # 1. 预测动作 (同时获取下一个 LSTM 状态)
         # model.predict 会自动处理 lstm_states=None 的情况
-        action, next_lstm_states = model.predict(
+        action, lstm_states = model.predict(
             obs,
             state=lstm_states, 
             episode_start=episode_starts,
             deterministic=True
         )
 
-        # 2. 计算价值和熵 (使用当前的 lstm_states 和 刚刚预测的 action)
-        with th.no_grad():
-            obs_tensor = th.as_tensor(obs).to(model.device)
-            action_tensor = th.as_tensor(action).to(model.device)
-            episode_starts_tensor = th.as_tensor(episode_starts).to(model.device)
-            
-            # 使用辅助函数转换状态
-            rnn_states = to_rnn_states(lstm_states, n_lstm_layers, lstm_hidden_size, model.device)
-
-            # evaluate_actions 返回 values, log_prob, entropy
-            values, log_prob, entropy = model.policy.evaluate_actions(
-                obs_tensor, 
-                action_tensor, 
-                rnn_states, 
-                episode_starts_tensor
-            )
-            
-            current_value = values.item()
-            current_entropy = entropy.mean().item()
-
-            # 记录实时数据
-            model.logger.record("trace/step_entropy", current_entropy)
-            model.logger.record("trace/step_value", current_value)
-
-            episode_values.append(current_value)
-            episode_entropies.append(current_entropy)
-
-        # 3. 更新状态
-        lstm_states = next_lstm_states
-
         # --- 定期写入日志 ---
         if total_steps % DUMP_FREQUENCY == 0:
             model.logger.dump(step=total_steps)
 
-        # 4. 执行环境步进
+        # 2. 执行环境步进
         obs, reward, done, info = env.step(action)
         
         # 在 episode 的后续步骤中，episode_starts 应为 False
         episode_starts = done
         
-        # 5. 检查 info 字典，看 VecEnv 是否自动重置了环境
+        # 3. 检查 info 字典，看 VecEnv 是否自动重置了环境
         if 'episode' in info[0]:
             episodes_completed += 1
             original_episode_reward = info[0]['episode']['r']
@@ -250,26 +176,14 @@ def main():
             
             eval_rewards.append(original_episode_reward)
             
-            # 计算本 episode 的平均价值和平均熵
-            avg_value = np.mean(episode_values) if episode_values else 0.0
-            avg_entropy = np.mean(episode_entropies) if episode_entropies else 0.0
-            
             print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | "
                   f"Reward: {original_episode_reward:.2f} | "
-                  f"Steps: {episode_length} | "
-                  f"Avg Value: {avg_value:.4f} | "
-                  f"Avg Entropy: {avg_entropy:.4f}")
+                  f"Steps: {episode_length}")
             
             # --- 记录到 TensorBoard (使用 total_steps 作为 X 轴) ---
             model.logger.record("eval/reward", original_episode_reward)
             model.logger.record("eval/episode_length", episode_length)
-            model.logger.record("eval/mean_value_estimate", avg_value)
-            model.logger.record("eval/mean_entropy", avg_entropy)
             model.logger.dump(step=total_steps)
-            
-            # 重置统计列表
-            episode_values = []
-            episode_entropies = []
 
     # --- 3. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
