@@ -70,7 +70,9 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 20
+    EVAL_EPISODES = 10
+    DUMP_FREQUENCY = 600 # 每隔多少步写入一次日志
+    
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/eval")
@@ -135,6 +137,7 @@ def main():
     
     eval_rewards = []
     episodes_completed = 0
+    total_steps = 0 # 引入总步数计数器
     
     # --- 核心修正：适配 VecEnv 的自动重置行为 ---
     # 1. 在循环外只 reset 一次
@@ -148,44 +151,62 @@ def main():
 
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
-        # 修正：VecNormalize 已经自动归一化了 obs，不需要再次调用 normalize_obs
-        # norm_obs = env.normalize_obs(obs) <--- 删除这行
+        total_steps += 1 # 步数 +1
         
-        # --- 获取价值估计和策略熵 (针对 RecurrentPPO) ---
-        obs_tensor = th.as_tensor(obs).to(model.device)
-        # RecurrentPPO 需要处理 LSTM 状态
-        # 注意：这里我们只是为了获取 value 和 entropy，不应该改变 lstm_states
-        # 因此我们需要传入当前的 lstm_states，但不更新它（更新在 predict 中进行）
-        with th.no_grad():
-            # 获取价值
-            values = model.policy.predict_values(obs_tensor, state=lstm_states, episode_start=episode_starts)
-            current_value = values.item()
-            
-            # 获取分布并计算熵
-            # RecurrentPPO 的 get_distribution 也需要状态
-            distribution, _ = model.policy.get_distribution(obs_tensor, state=lstm_states, episode_start=episode_starts)
-            current_entropy = distribution.entropy().mean().item()
+        # 1. 先预测动作 (同时获取下一个 LSTM 状态)
+        # 注意：这里我们使用当前的 lstm_states
+        action, next_lstm_states = model.predict(
+            obs,
+            state=lstm_states, 
+            episode_start=episode_starts,
+            deterministic=True
+        )
 
-            # 将每一帧的实时数据记入日志 (不要等 episode 结束)
-            # 在 TensorBoard 中，这会形成一条随 step 轴波动的曲线
+        # 2. 计算价值和熵 (使用当前的 lstm_states 和 刚刚预测的 action)
+        # RecurrentPPO 的 predict_values 不支持 state 参数，所以我们使用 evaluate_actions
+        with th.no_grad():
+            obs_tensor = th.as_tensor(obs).to(model.device)
+            action_tensor = th.as_tensor(action).to(model.device)
+            episode_starts_tensor = th.as_tensor(episode_starts).to(model.device)
+            
+            # 转换 lstm_states 为 tensor (因为 model.predict 返回的是 numpy)
+            if lstm_states is None:
+                lstm_states_tensor = None
+            else:
+                lstm_states_tensor = tuple(th.as_tensor(s).to(model.device) for s in lstm_states)
+
+            # evaluate_actions 返回 values, log_prob, entropy
+            values, log_prob, entropy = model.policy.evaluate_actions(
+                obs_tensor, 
+                action_tensor, 
+                lstm_states_tensor, 
+                episode_starts_tensor
+            )
+            
+            current_value = values.item()
+            current_entropy = entropy.mean().item()
+
+            # 记录实时数据
             model.logger.record("trace/step_entropy", current_entropy)
             model.logger.record("trace/step_value", current_value)
 
             episode_values.append(current_value)
             episode_entropies.append(current_entropy)
 
-        action, lstm_states = model.predict(
-            obs,
-            state=lstm_states, 
-            episode_start=episode_starts,
-            deterministic=True
-        )
+        # 3. 更新状态
+        lstm_states = next_lstm_states
+
+        # --- 定期写入日志 ---
+        if total_steps % DUMP_FREQUENCY == 0:
+            model.logger.dump(step=total_steps)
+
+        # 4. 执行环境步进
         obs, reward, done, info = env.step(action)
         
         # 在 episode 的后续步骤中，episode_starts 应为 False
         episode_starts = done
         
-        # 3. 检查 info 字典，看 VecEnv 是否自动重置了环境
+        # 5. 检查 info 字典，看 VecEnv 是否自动重置了环境
         if 'episode' in info[0]:
             episodes_completed += 1
             original_episode_reward = info[0]['episode']['r']
@@ -203,12 +224,12 @@ def main():
                   f"Avg Value: {avg_value:.4f} | "
                   f"Avg Entropy: {avg_entropy:.4f}")
             
-            # --- 记录到 TensorBoard ---
+            # --- 记录到 TensorBoard (使用 total_steps 作为 X 轴) ---
             model.logger.record("eval/reward", original_episode_reward)
             model.logger.record("eval/episode_length", episode_length)
             model.logger.record("eval/mean_value_estimate", avg_value)
             model.logger.record("eval/mean_entropy", avg_entropy)
-            model.logger.dump(step=episodes_completed)
+            model.logger.dump(step=total_steps)
             
             # 重置统计列表
             episode_values = []

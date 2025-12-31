@@ -77,8 +77,9 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 20
+    EVAL_EPISODES = 10
     SEQUENCE_LENGTH = 32 # 必须与训练脚本 train_sb3_attention_ppo.py 中的设置一致
+    DUMP_FREQUENCY = 600 # 每隔多少步写入一次日志
     
     # --- 使用基于项目根目录的绝对路径 ---
     # 对应 train_sb3_attention_ppo.py 中保存的文件名
@@ -140,6 +141,7 @@ def main():
     
     eval_rewards = []
     episodes_completed = 0
+    total_steps = 0 # 引入总步数计数器
     
     # --- 核心修正：适配 VecEnv 的自动重置行为 ---
     # 1. 在循环外只 reset 一次
@@ -151,8 +153,7 @@ def main():
 
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
-        # 修正：VecNormalize 已经自动归一化了 obs，不需要再次调用 normalize_obs
-        # norm_obs = env.normalize_obs(obs) <--- 删除这行
+        total_steps += 1 # 步数 +1
         
         # --- 获取价值估计和策略熵 ---
         obs_tensor = th.as_tensor(obs).to(model.device)
@@ -165,13 +166,16 @@ def main():
             distribution = model.policy.get_distribution(obs_tensor)
             current_entropy = distribution.entropy().mean().item()
 
-            # 将每一帧的实时数据记入日志 (不要等 episode 结束)
-            # 在 TensorBoard 中，这会形成一条随 step 轴波动的曲线
+            # 记录实时数据
             model.logger.record("trace/step_entropy", current_entropy)
             model.logger.record("trace/step_value", current_value)
 
             episode_values.append(current_value)
             episode_entropies.append(current_entropy)
+
+        # --- 定期写入日志 (关键修改) ---
+        if total_steps % DUMP_FREQUENCY == 0:
+            model.logger.dump(step=total_steps)
 
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
@@ -194,12 +198,12 @@ def main():
                   f"Avg Value: {avg_value:.4f} | "
                   f"Avg Entropy: {avg_entropy:.4f}")
             
-            # --- 记录到 TensorBoard ---
+            # --- 记录到 TensorBoard (使用 total_steps 作为 X 轴) ---
             model.logger.record("eval/reward", original_episode_reward)
             model.logger.record("eval/episode_length", episode_length)
             model.logger.record("eval/mean_value_estimate", avg_value)
             model.logger.record("eval/mean_entropy", avg_entropy)
-            model.logger.dump(step=episodes_completed)
+            model.logger.dump(step=total_steps)
             
             # 重置统计列表
             episode_values = []
