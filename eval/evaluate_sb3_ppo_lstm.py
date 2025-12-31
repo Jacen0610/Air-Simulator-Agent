@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import time
 import torch as th # 导入 torch
+from collections import namedtuple # 导入 namedtuple
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
@@ -26,6 +27,9 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure # 导入 logger 配置
 # --------------------------------
 from env.gym_env_for_lstm import GymEnvForLSTM
+
+# 定义 RNNStates 以匹配 sb3_contrib 的期望结构
+RNNStates = namedtuple("RNNStates", ("pi", "vf"))
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """
@@ -58,6 +62,38 @@ def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     print(f"评估奖励图表已保存至: {filename}")
     plt.close()
 
+def to_rnn_states(lstm_states, n_layers, hidden_size, device):
+    """
+    辅助函数：将 numpy tuple 状态或 None 转换为 RNNStates 对象 (包含 Tensor)。
+    """
+    if lstm_states is None:
+        # 初始化全零状态: (n_lstm_layers, batch_size, hidden_size)
+        # batch_size = 1
+        h = th.zeros(n_layers, 1, hidden_size).to(device)
+        c = th.zeros(n_layers, 1, hidden_size).to(device)
+        # 假设 actor 和 critic 使用独立的 LSTM (默认配置)
+        return RNNStates(pi=(h, c), vf=(h, c))
+    
+    # lstm_states 是 numpy array 的 tuple
+    # 转换为 tensors
+    states_tensors = [th.as_tensor(s).to(device) for s in lstm_states]
+    
+    # 根据 tuple 长度判断结构
+    # 通常 RecurrentPPO 返回 (h_pi, c_pi, h_vf, c_vf)
+    if len(states_tensors) == 4:
+        return RNNStates(
+            pi=(states_tensors[0], states_tensors[1]),
+            vf=(states_tensors[2], states_tensors[3])
+        )
+    elif len(states_tensors) == 2:
+        # 可能是共享 LSTM
+        return RNNStates(
+            pi=(states_tensors[0], states_tensors[1]),
+            vf=(states_tensors[0], states_tensors[1])
+        )
+    else:
+        raise ValueError(f"Unexpected lstm_states length: {len(states_tensors)}")
+
 def main():
     """
     主评估流程 - 专门用于 RecurrentPPO (LSTM) 模型。
@@ -71,7 +107,7 @@ def main():
 
     # --- 配置 ---
     EVAL_EPISODES = 10
-    DUMP_FREQUENCY = 600 # 每隔多少步写入一次日志
+    DUMP_FREQUENCY = 3000 # 每隔多少步写入一次日志
     
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
@@ -149,12 +185,16 @@ def main():
     episode_values = []
     episode_entropies = []
 
+    # 获取 LSTM 参数以进行手动初始化
+    lstm_hidden_size = model.policy.lstm_hidden_size
+    n_lstm_layers = model.policy.n_lstm_layers
+    
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
         total_steps += 1 # 步数 +1
         
         # 1. 先预测动作 (同时获取下一个 LSTM 状态)
-        # 注意：这里我们使用当前的 lstm_states
+        # model.predict 会自动处理 lstm_states=None 的情况
         action, next_lstm_states = model.predict(
             obs,
             state=lstm_states, 
@@ -163,23 +203,19 @@ def main():
         )
 
         # 2. 计算价值和熵 (使用当前的 lstm_states 和 刚刚预测的 action)
-        # RecurrentPPO 的 predict_values 不支持 state 参数，所以我们使用 evaluate_actions
         with th.no_grad():
             obs_tensor = th.as_tensor(obs).to(model.device)
             action_tensor = th.as_tensor(action).to(model.device)
             episode_starts_tensor = th.as_tensor(episode_starts).to(model.device)
             
-            # 转换 lstm_states 为 tensor (因为 model.predict 返回的是 numpy)
-            if lstm_states is None:
-                lstm_states_tensor = None
-            else:
-                lstm_states_tensor = tuple(th.as_tensor(s).to(model.device) for s in lstm_states)
+            # 使用辅助函数转换状态
+            rnn_states = to_rnn_states(lstm_states, n_lstm_layers, lstm_hidden_size, model.device)
 
             # evaluate_actions 返回 values, log_prob, entropy
             values, log_prob, entropy = model.policy.evaluate_actions(
                 obs_tensor, 
                 action_tensor, 
-                lstm_states_tensor, 
+                rnn_states, 
                 episode_starts_tensor
             )
             
