@@ -62,7 +62,7 @@ def main():
         "MlpPolicy",
         env,
         policy_kwargs=policy_kwargs,
-        verbose=1,
+        verbose=0,
         learning_rate=1e-5,
         gamma=GAMMA,
         # --- 核心对齐参数 ---
