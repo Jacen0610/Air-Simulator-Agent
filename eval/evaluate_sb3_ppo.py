@@ -14,10 +14,12 @@ if project_root not in sys.path:
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import torch as th # 导入 torch
 from stable_baselines3 import PPO
 # --- 导入手动包装所需的组件 ---
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.logger import configure # 导入 logger 配置
 # --------------------------------
 import numpy as np
 import time
@@ -73,15 +75,19 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 10
+    EVAL_EPISODES = 20
     
     # --- 使用基于项目根目录的绝对路径 ---
     MODEL_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_ppo.zip")
     STATS_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_vec_normalize.pkl")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/eval") # 评估图表保存目录
     
+    # TensorBoard 日志目录
+    TBL_LOG_DIR = os.path.join(project_root, "sb3_logs/eval_mlp_ppo")
+    
     # 确保保存目录存在
     os.makedirs(PLOT_DIR, exist_ok=True)
+    os.makedirs(TBL_LOG_DIR, exist_ok=True)
 
     # 检查模型文件和统计数据文件是否存在
     if not os.path.exists(MODEL_PATH):
@@ -119,6 +125,13 @@ def main():
         env.close()
         return
 
+    # --- 配置 TensorBoard Logger ---
+    # 使用时间戳区分不同的评估运行
+    run_name = f"eval_run_{int(time.time())}"
+    new_logger = configure(os.path.join(TBL_LOG_DIR, run_name), ["stdout", "tensorboard"])
+    model.set_logger(new_logger)
+    print(f"TensorBoard 日志将保存至: {os.path.join(TBL_LOG_DIR, run_name)}")
+
     # --- 3. 运行评估循环 ---
     print(f"\n开始评估模型，共 {EVAL_EPISODES} 个 episodes...")
     
@@ -129,10 +142,33 @@ def main():
     # 1. 在循环外只 reset 一次
     obs = env.reset()
     
+    # 用于收集每个 episode 的统计数据
+    episode_values = []
+    episode_entropies = []
+
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
-        norm_obs = env.normalize_obs(obs)
-        action, _ = model.predict(norm_obs, deterministic=True)
+        # 修正：VecNormalize 已经自动归一化了 obs，不需要再次调用 normalize_obs
+        # norm_obs = env.normalize_obs(obs) <--- 删除这行
+        
+        # --- 获取价值估计和策略熵 ---
+        # 直接使用 obs，因为它已经是归一化后的
+        obs_tensor = th.as_tensor(obs).to(model.device)
+        with th.no_grad():
+            distribution = model.policy.get_distribution(obs_tensor)
+            current_entropy = distribution.entropy().mean().item()
+            current_value = model.policy.predict_values(obs_tensor).item()
+
+            # 将每一帧的实时数据记入日志 (不要等 episode 结束)
+            # 在 TensorBoard 中，这会形成一条随 step 轴波动的曲线
+            model.logger.record("trace/step_entropy", current_entropy)
+            model.logger.record("trace/step_value", current_value)
+
+            # 用于计算 episode 平均值的缓存
+            episode_values.append(current_value)
+            episode_entropies.append(current_entropy)
+
+        action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         
         # 3. 检查 info 字典，看 VecEnv 是否自动重置了环境
@@ -142,7 +178,27 @@ def main():
             episode_length = info[0]['episode']['l']
             
             eval_rewards.append(original_episode_reward)
-            print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {episode_length}")
+            
+            # 计算本 episode 的平均价值和平均熵
+            avg_value = np.mean(episode_values) if episode_values else 0.0
+            avg_entropy = np.mean(episode_entropies) if episode_entropies else 0.0
+            
+            print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | "
+                  f"Reward: {original_episode_reward:.2f} | "
+                  f"Steps: {episode_length} | "
+                  f"Avg Value: {avg_value:.4f} | "
+                  f"Avg Entropy: {avg_entropy:.4f}")
+            
+            # --- 记录到 TensorBoard ---
+            model.logger.record("eval/reward", original_episode_reward)
+            model.logger.record("eval/episode_length", episode_length)
+            model.logger.record("eval/mean_value_estimate", avg_value)
+            model.logger.record("eval/mean_entropy", avg_entropy)
+            model.logger.dump(step=episodes_completed)
+            
+            # 重置统计列表
+            episode_values = []
+            episode_entropies = []
 
     # --- 4. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")

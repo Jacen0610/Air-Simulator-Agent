@@ -16,12 +16,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import time
+import torch as th # 导入 torch
 
 # [核心修改] 导入 RecurrentPPO 和对应的 LSTM 环境
 from sb3_contrib import RecurrentPPO
 # --- 导入手动包装所需的组件 ---
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.logger import configure # 导入 logger 配置
 # --------------------------------
 from env.gym_env_for_lstm import GymEnvForLSTM
 
@@ -68,10 +70,13 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 10
+    EVAL_EPISODES = 20
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/eval")
+    
+    # TensorBoard 日志目录
+    TBL_LOG_DIR = os.path.join(project_root, "sb3_logs/eval_lstm_ppo")
     
     # [核心修改] 指向 LSTM 模型文件
     MODEL_PATH = os.path.join(MODEL_DIR, "recurrent_ppo_lstm.zip")
@@ -89,6 +94,7 @@ def main():
         return
 
     os.makedirs(PLOT_DIR, exist_ok=True)
+    os.makedirs(TBL_LOG_DIR, exist_ok=True)
 
     # --- 1. 创建环境并加载模型 ---
     print("正在初始化为 LSTM 优化的 Gym 环境...")
@@ -118,6 +124,12 @@ def main():
         env.close()
         return
 
+    # --- 配置 TensorBoard Logger ---
+    run_name = f"eval_run_{int(time.time())}"
+    new_logger = configure(os.path.join(TBL_LOG_DIR, run_name), ["stdout", "tensorboard"])
+    model.set_logger(new_logger)
+    print(f"TensorBoard 日志将保存至: {os.path.join(TBL_LOG_DIR, run_name)}")
+
     # --- 2. 运行评估循环 ---
     print(f"\n开始评估模型，共 {EVAL_EPISODES} 个 episodes...")
     
@@ -130,11 +142,40 @@ def main():
     lstm_states = None
     episode_starts = np.ones((1,), dtype=bool)
     
+    # 用于收集每个 episode 的统计数据
+    episode_values = []
+    episode_entropies = []
+
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
-        norm_obs = env.normalize_obs(obs)
+        # 修正：VecNormalize 已经自动归一化了 obs，不需要再次调用 normalize_obs
+        # norm_obs = env.normalize_obs(obs) <--- 删除这行
+        
+        # --- 获取价值估计和策略熵 (针对 RecurrentPPO) ---
+        obs_tensor = th.as_tensor(obs).to(model.device)
+        # RecurrentPPO 需要处理 LSTM 状态
+        # 注意：这里我们只是为了获取 value 和 entropy，不应该改变 lstm_states
+        # 因此我们需要传入当前的 lstm_states，但不更新它（更新在 predict 中进行）
+        with th.no_grad():
+            # 获取价值
+            values = model.policy.predict_values(obs_tensor, state=lstm_states, episode_start=episode_starts)
+            current_value = values.item()
+            
+            # 获取分布并计算熵
+            # RecurrentPPO 的 get_distribution 也需要状态
+            distribution, _ = model.policy.get_distribution(obs_tensor, state=lstm_states, episode_start=episode_starts)
+            current_entropy = distribution.entropy().mean().item()
+
+            # 将每一帧的实时数据记入日志 (不要等 episode 结束)
+            # 在 TensorBoard 中，这会形成一条随 step 轴波动的曲线
+            model.logger.record("trace/step_entropy", current_entropy)
+            model.logger.record("trace/step_value", current_value)
+
+            episode_values.append(current_value)
+            episode_entropies.append(current_entropy)
+
         action, lstm_states = model.predict(
-            norm_obs,
+            obs,
             state=lstm_states, 
             episode_start=episode_starts,
             deterministic=True
@@ -151,7 +192,27 @@ def main():
             episode_length = info[0]['episode']['l']
             
             eval_rewards.append(original_episode_reward)
-            print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | Reward: {original_episode_reward:.2f} | Steps: {episode_length}")
+            
+            # 计算本 episode 的平均价值和平均熵
+            avg_value = np.mean(episode_values) if episode_values else 0.0
+            avg_entropy = np.mean(episode_entropies) if episode_entropies else 0.0
+            
+            print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | "
+                  f"Reward: {original_episode_reward:.2f} | "
+                  f"Steps: {episode_length} | "
+                  f"Avg Value: {avg_value:.4f} | "
+                  f"Avg Entropy: {avg_entropy:.4f}")
+            
+            # --- 记录到 TensorBoard ---
+            model.logger.record("eval/reward", original_episode_reward)
+            model.logger.record("eval/episode_length", episode_length)
+            model.logger.record("eval/mean_value_estimate", avg_value)
+            model.logger.record("eval/mean_entropy", avg_entropy)
+            model.logger.dump(step=episodes_completed)
+            
+            # 重置统计列表
+            episode_values = []
+            episode_entropies = []
 
     # --- 3. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
