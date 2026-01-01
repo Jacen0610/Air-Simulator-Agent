@@ -29,9 +29,9 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 20  # TEA 结构较深，建议多跑一些 Episode 观察收敛
-    GAMMA = 0.99
-    SEQUENCE_LENGTH = 16
+    TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    GAMMA = 0.98
+    SEQUENCE_LENGTH = 48
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
@@ -83,9 +83,9 @@ def main():
         verbose=0,
         learning_rate=linear_schedule(initial_lr),  # 这里应用线性衰减
         gamma=0.99,  # 锁定 0.99 以解决长程死等
-        n_steps=2048,  # 增加更新频率
-        batch_size=256,  # 适配 FPS
-        n_epochs=2,  # 充分利用每批数据
+        n_steps=1024,  # 增加更新频率
+        batch_size=128,  # 适配 FPS
+        n_epochs=1,  # 充分利用每批数据
         clip_range=0.1,
         gae_lambda=0.95,  # 配合 gamma 0.99 的优势估计优化
         ent_coef=0.01,
