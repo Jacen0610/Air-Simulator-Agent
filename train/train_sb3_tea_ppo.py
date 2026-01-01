@@ -74,7 +74,7 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 1e-4
+    initial_lr = 5e-5
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
@@ -85,10 +85,10 @@ def main():
         gamma=0.99,  # 锁定 0.99 以解决长程死等
         n_steps=2048,  # 增加更新频率
         batch_size=256,  # 适配 FPS
-        n_epochs=4,  # 充分利用每批数据
+        n_epochs=2,  # 充分利用每批数据
         clip_range=0.1,
         gae_lambda=0.95,  # 配合 gamma 0.99 的优势估计优化
-        ent_coef=0.005,
+        ent_coef=0.01,
         vf_coef=0.1,
         max_grad_norm=0.5,
         device="cuda",
