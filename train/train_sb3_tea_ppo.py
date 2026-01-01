@@ -74,7 +74,7 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 5e-5
+    initial_lr = 3e-5
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
