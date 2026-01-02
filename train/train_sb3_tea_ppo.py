@@ -31,7 +31,7 @@ def main():
     # --- 1. 参数设置 ---
     TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
     GAMMA = 0.98
-    SEQUENCE_LENGTH = 48
+    SEQUENCE_LENGTH = 96
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")
@@ -51,11 +51,11 @@ def main():
     policy_kwargs = dict(
         features_extractor_class=TEA_Extractor,
         features_extractor_kwargs=dict(
-            features_dim=256,
+            features_dim=512,
             embed_dim=128
         ),
         # 决策头：TEA 已经集成了 LSTM 特征，后端 MLP 保持轻量
-        net_arch=dict(pi=[128, 64], vf=[128, 64])
+        net_arch=dict(pi=[128, 64], vf=[512,256])
     )
 
     def linear_schedule(initial_value: float) -> Callable[[float], float]:
@@ -83,12 +83,12 @@ def main():
         verbose=0,
         learning_rate=linear_schedule(initial_lr),  # 这里应用线性衰减
         gamma=0.99,  # 锁定 0.99 以解决长程死等
-        n_steps=1024,  # 增加更新频率
-        batch_size=128,  # 适配 FPS
+        n_steps=4096,  # 增加更新频率
+        batch_size=512,  # 适配 FPS
         n_epochs=1,  # 充分利用每批数据
         clip_range=0.1,
         gae_lambda=0.95,  # 配合 gamma 0.99 的优势估计优化
-        ent_coef=0.01,
+        ent_coef=0.05,
         vf_coef=0.1,
         max_grad_norm=0.5,
         device="cuda",
