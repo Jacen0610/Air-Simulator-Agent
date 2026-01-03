@@ -78,8 +78,8 @@ def main():
 
     # --- 配置 ---
     EVAL_EPISODES = 10
-    SEQUENCE_LENGTH = 48 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
-    DUMP_FREQUENCY = 600 # 每隔多少步写入一次日志
+    SEQUENCE_LENGTH = 96 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
+    DUMP_FREQUENCY = 800 # 每隔多少步写入一次日志
     
     # --- 路径设置 ---
     # 注意：train_sb3_tea_ppo.py 中保存路径可能包含额外的 'models' 子目录
