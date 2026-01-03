@@ -14,7 +14,7 @@ class GymEnvForLSTM(gym.Env):
     """
     metadata = {'render_modes': []}
 
-    def __init__(self, grpc_server_address='localhost:50051', sequence_length=32):
+    def __init__(self, grpc_server_address='localhost:50051', sequence_length=96):
         """
         初始化环境。
         """

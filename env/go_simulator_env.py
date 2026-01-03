@@ -14,7 +14,7 @@ class GoSimulatorEnv:
     [2024-05-26 更新] 封装 Go 模拟器 gRPC 服务的强化学习环境。
     此版本适配了包含12个特征的 protobuf 定义。
     """
-    def __init__(self, grpc_server_address='localhost:50051', sequence_length=10):
+    def __init__(self, grpc_server_address='localhost:50051', sequence_length=96):
         self.grpc_server_address = grpc_server_address
         self.channel = None
         self.stub = None

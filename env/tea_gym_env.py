@@ -6,7 +6,7 @@ from env.go_simulator_env import GoSimulatorEnv
 
 
 class TEAGymEnv(gym.Env):
-    def __init__(self, grpc_server_address='localhost:50051', sequence_length=32):
+    def __init__(self, grpc_server_address='localhost:50051', sequence_length=96):
         super().__init__()
         self.sequence_length = sequence_length
         self.go_env = GoSimulatorEnv(

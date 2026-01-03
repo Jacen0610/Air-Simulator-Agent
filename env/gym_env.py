@@ -7,7 +7,7 @@ from env.go_simulator_env import GoSimulatorEnv
 class GymEnv(gym.Env):
     metadata = {'render_modes': []}
 
-    def __init__(self, grpc_server_address='localhost:50051', sequence_length=32):  # 建议对齐 Transformer 的 32
+    def __init__(self, grpc_server_address='localhost:50051', sequence_length=96):  # 建议对齐 Transformer 的 32
         super().__init__()
 
         # 1. 明确 sequence_length
