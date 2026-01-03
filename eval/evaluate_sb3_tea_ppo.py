@@ -77,7 +77,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 10
+    EVAL_EPISODES = 20
     SEQUENCE_LENGTH = 96 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
     DUMP_FREQUENCY = 800 # 每隔多少步写入一次日志
     
