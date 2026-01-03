@@ -15,16 +15,17 @@ class TEAGymEnv(gym.Env):
         )
         self.action_space = spaces.Discrete(self.go_env.action_dim)
 
-        # 显式声明 (32, 12) 形状
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
             shape=(self.sequence_length, self.go_env.state_dim),
             dtype=np.float32
         )
 
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         obs = self.go_env.reset()
+        print(f"DEBUG: obs shape: {obs.shape}, sum of obs: {np.sum(obs)}")
         return np.array(obs, dtype=np.float32), {}
 
     def step(self, action):

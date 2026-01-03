@@ -30,7 +30,7 @@ def main():
 
     # --- 1. 参数设置 ---
     TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
-    GAMMA = 0.98
+    GAMMA = 0.99
     SEQUENCE_LENGTH = 96
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
