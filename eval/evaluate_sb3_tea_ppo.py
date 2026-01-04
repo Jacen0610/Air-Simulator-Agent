@@ -75,7 +75,7 @@ def main():
     args = parser.parse_args()
     grpc_address = f'localhost:{args.grpc_port}'
 
-    EVAL_EPISODES = 20
+    EVAL_EPISODES = 5
     SEQUENCE_LENGTH = 96
     DUMP_FREQUENCY = 800
 
@@ -104,7 +104,7 @@ def main():
     episodes_completed = 0
     total_steps = 0
 
-    last_is_busy = 1  # 初始状态假设为忙
+    last_is_busy = 0
 
     while episodes_completed < EVAL_EPISODES:
         total_steps += 1
