@@ -26,7 +26,7 @@ import time
 
 # 导入 TEA 相关的环境和特征提取器
 from env.tea_gym_env import TEAGymEnv
-from agent.tea_feature_extractor import TEA_Extractor
+from agent.tea_feature_extractor import TEA_Extractor_V2
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """
@@ -78,7 +78,7 @@ def main():
 
     # --- 配置 ---
     EVAL_EPISODES = 10
-    SEQUENCE_LENGTH = 96 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
+    SEQUENCE_LENGTH = 32 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
     DUMP_FREQUENCY = 3000 # 每隔多少步写入一次日志
     
     # --- 路径设置 ---
@@ -161,8 +161,9 @@ def main():
     
     # [新增] 用于测量 is_busy 变为 0 后的发送延迟
     # is_busy 在观测向量中的索引是 1
-    # 我们需要使用未经归一化的原始观测值
-    previous_is_busy = env.get_original_obs()[0][1]
+    # [修复] 提取正确的标量值
+    # get_original_obs() -> (n_envs, seq_len, features)
+    previous_is_busy = env.get_original_obs()[0][-1][1]
     waiting_for_send_after_busy = False
     steps_since_idle = 0
     episode_send_delays = []
@@ -176,8 +177,8 @@ def main():
         total_steps += 1 # 步数 +1
         
         # [新增] 状态机逻辑
-        # 使用原始观测值来判断 is_busy 状态
-        current_is_busy = env.get_original_obs()[0][1]
+        # [修复] 提取正确的标量值
+        current_is_busy = env.get_original_obs()[0][-1][1]
         
         # 检测 is_busy 从 1 -> 0 的跳变
         if previous_is_busy == 1 and current_is_busy == 0:

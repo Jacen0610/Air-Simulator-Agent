@@ -1,27 +1,26 @@
-import torch as th
+import torch
 import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
-class TEA_Extractor(BaseFeaturesExtractor):
+class TEA_Extractor_V2(BaseFeaturesExtractor):
     """
-    TEA 架构：瓶颈压缩 (Attention) + 特征演进 (LSTM)
-    直觉逻辑：
-    - Attention 在 32 步 (70ms) 窗口内寻找高密度背景下的“可发送空隙”。
-    - LSTM 记住 90s 维度的背景模式，提供长程决策惯性，压制无效动作。
+    改进版 TEA 架构：增加“实时特征直连”通道
+    - 解决 Attention 全局平滑导致的决策迟滞问题。
+    - 保持低无效动作的同时，找回那 500ms 的反应速度。
     """
     def __init__(self, observation_space, features_dim=256, embed_dim=128):
+        # 注意：为了容纳直连特征，我们调整内部隐向量维度
         super().__init__(observation_space, features_dim)
-        seq_len, state_dim = observation_space.shape  # (32, 12)
+        seq_len, state_dim = observation_space.shape  # (96, 12) 或 (32, 12)
 
-        # 1. 瓶颈压缩前置：特征投影
+        # 1. 基础投影层
         self.projection = nn.Sequential(
             nn.Linear(state_dim, embed_dim),
             nn.LayerNorm(embed_dim),
             nn.GELU()
         )
 
-        # 2. 瞬时扫描仪 (Attention)：专注 70ms 内的空隙识别
-        # 采用 2 个 Head 以兼顾“干扰强度”和“信道占用”两个关键维度的对比
+        # 2. 瞬时扫描仪 (Attention) - 保持不变，负责模式识别
         self.instant_scanner = nn.MultiheadAttention(
             embed_dim=embed_dim,
             num_heads=2,
@@ -29,28 +28,51 @@ class TEA_Extractor(BaseFeaturesExtractor):
         )
         self.attn_norm = nn.LayerNorm(embed_dim)
 
-        # 3. 特征演进器 (LSTM)：记忆 90s 背景模式演变
-        # 负责处理经 Attention 提纯后的信号，确保长程稳定性
+        # 3. 特征演进器 (LSTM) - 负责长程稳定性
+        # 将 hidden_size 设为 features_dim 的一部分，为直连特征留出空间
+        self.lstm_hidden_dim = features_dim - 64  # 留出 64 维给实时特征
         self.long_term_memory = nn.LSTM(
             input_size=embed_dim,
-            hidden_size=features_dim,
+            hidden_size=self.lstm_hidden_dim,
             num_layers=1,
             batch_first=True
         )
 
+        # 4. 【新增】实时特征投影头
+        # 专门处理当前最后一帧的原始观察值
+        self.latest_frame_projector = nn.Sequential(
+            nn.Linear(state_dim, 64),
+            nn.ReLU()
+        )
+
+        # 5. 【新增】特征融合层
+        # 将 LSTM 的长程判断和最新帧的瞬间判断进行最终融合
+        self.fusion_layer = nn.Sequential(
+            nn.Linear(features_dim, features_dim),
+            nn.LayerNorm(features_dim),
+            nn.GELU()
+        )
+
     def forward(self, observations):
-        # Step 1: 投影到嵌入空间 (Batch, 32, 128)
+        # Step 1: 提取原始输入中最新的一帧 (Batch, 12)
+        # 这是物理世界最实时的信号，不经过任何时序平滑
+        latest_raw_obs = observations[:, -1, :]
+        latest_feature = self.latest_frame_projector(latest_raw_obs) # (Batch, 64)
+
+        # Step 2: 投影到嵌入空间 (用于时序处理)
         x = self.projection(observations)
 
-        # Step 2: 瓶颈压缩 - Attention 聚焦 (找出空隙)
-        # 这里的 scanner_out 实际上是 32 步中每一步根据上下文加权后的结果
+        # Step 3: Attention 聚焦 (找出模式，过滤干扰)
         scanner_out, _ = self.instant_scanner(x, x, x)
         refined_signals = self.attn_norm(x + scanner_out)
 
-        # Step 3: 特征演进 - LSTM 记忆
-        # 将提纯后的 32 步信号喂给 LSTM
-        # LSTM 的 Hidden State 会跨越步数累积，感知 90s 背景模式
+        # Step 4: LSTM 记忆 (累积长程决策惯性)
         _, (h_n, _) = self.long_term_memory(refined_signals)
+        lstm_out = h_n[-1] # (Batch, lstm_hidden_dim)
 
-        # 输出最后一步的隐状态 (Batch, 256)
-        return h_n[-1]
+        # Step 5: 【关键核心】特征拼接 (Concatenation)
+        # 将 LSTM 提供的“大局观”和最新帧提供的“瞬间变绿灯信号”强行拼接
+        combined = torch.cat([lstm_out, latest_feature], dim=-1) # (Batch, 256)
+
+        # Step 6: 融合输出
+        return self.fusion_layer(combined)

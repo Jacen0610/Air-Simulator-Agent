@@ -14,7 +14,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
 
 # 导入我们新定义的组件
-from agent.tea_feature_extractor import TEA_Extractor
+from agent.tea_feature_extractor import TEA_Extractor_V2
 from env.tea_gym_env import TEAGymEnv
 # 复用你原来的 Callback 和 Plot 函数
 from train.train_sb3_transformer_ppo import AttentionVisualizationCallback, plot_rewards
@@ -29,8 +29,8 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
-    GAMMA = 0.96
+    TOTAL_EPISODES = 20  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    GAMMA = 0.95
     SEQUENCE_LENGTH = 96
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
@@ -49,7 +49,7 @@ def main():
 
     # --- 3. 定义 TEA-PPO 策略参数 ---
     policy_kwargs = dict(
-        features_extractor_class=TEA_Extractor,
+        features_extractor_class=TEA_Extractor_V2,
         features_extractor_kwargs=dict(
             features_dim=512,
             embed_dim=128
