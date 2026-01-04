@@ -82,12 +82,12 @@ def main():
         policy_kwargs=policy_kwargs,
         verbose=0,
         learning_rate=linear_schedule(initial_lr),  # 这里应用线性衰减
-        gamma=0.99,  # 锁定 0.99 以解决长程死等
+        gamma=GAMMA,
         n_steps=4096,  # 增加更新频率
         batch_size=512,  # 适配 FPS
         n_epochs=1,  # 充分利用每批数据
         clip_range=0.1,
-        gae_lambda=0.95,  # 配合 gamma 0.99 的优势估计优化
+        gae_lambda=0.95,
         ent_coef=0.05,
         vf_coef=0.1,
         max_grad_norm=0.5,
