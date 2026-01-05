@@ -14,7 +14,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
 
 # 导入我们新定义的组件
-from agent.tea_feature_extractor import TEA_Extractor_V4
+from agent.tea_feature_extractor import TEA_Extractor_V2
 from env.tea_gym_env import TEAGymEnv
 # 复用你原来的 Callback 和 Plot 函数
 from train.train_sb3_transformer_ppo import AttentionVisualizationCallback, plot_rewards
@@ -45,11 +45,11 @@ def main():
     ), n_envs=1)
 
     # 同步 Gamma 以适配 VecNormalize
-    env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=GAMMA)
+    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
 
     # --- 3. 定义 TEA-PPO 策略参数 ---
     policy_kwargs = dict(
-        features_extractor_class=TEA_Extractor_V4,
+        features_extractor_class=TEA_Extractor_V2,
         features_extractor_kwargs=dict(
             features_dim=512,
             embed_dim=128
@@ -74,7 +74,7 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 1e-4
+    initial_lr = 5e-5
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
@@ -88,9 +88,9 @@ def main():
         n_epochs=3,  # 充分利用每批数据
         clip_range=0.2,
         gae_lambda=0.95,
-        ent_coef=0.05,
-        vf_coef=0.2,
-        max_grad_norm=0.1,
+        ent_coef=0.01,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
         device="cuda",
         tensorboard_log="./sb3_logs/tea_ppo/train/"
     )

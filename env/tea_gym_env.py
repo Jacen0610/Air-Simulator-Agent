@@ -62,12 +62,4 @@ class TEAGymEnv(gym.Env):
         terminated = done
         truncated = info.get("time_out", False)
 
-        if np.isnan(refined_obs).any() or np.isinf(refined_obs).any():
-            print("Found NaN in refined_obs from Go!")
-            refined_obs = np.nan_to_num(refined_obs, 0.0)
-
-        if np.isnan(reward) or np.isinf(reward):
-            print("Found NaN in Reward!")
-            reward = 0.0
-
         return refined_obs, float(reward), terminated, truncated, info
