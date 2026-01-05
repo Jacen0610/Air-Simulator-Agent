@@ -29,7 +29,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    TOTAL_EPISODES = 20  # TEA 结构较深，建议多跑一些 Episode 观察收敛
     GAMMA = 0.98
     SEQUENCE_LENGTH = 96
 
@@ -74,7 +74,7 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 5e-5
+    initial_lr = 1e-5
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
@@ -85,10 +85,10 @@ def main():
         gamma=GAMMA,
         n_steps=4096,  # 增加更新频率
         batch_size=512,  # 适配 FPS
-        n_epochs=3,  # 充分利用每批数据
+        n_epochs=1,  # 充分利用每批数据
         clip_range=0.2,
         gae_lambda=0.95,
-        ent_coef=0.01,
+        ent_coef=0.1,
         vf_coef=0.5,
         max_grad_norm=0.5,
         device="cuda",
