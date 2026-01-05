@@ -14,7 +14,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
 
 # 导入我们新定义的组件
-from agent.tea_feature_extractor import TEA_Extractor_V2
+from agent.tea_feature_extractor import TEA_Extractor_V3
 from env.tea_gym_env import TEAGymEnv
 # 复用你原来的 Callback 和 Plot 函数
 from train.train_sb3_transformer_ppo import AttentionVisualizationCallback, plot_rewards
