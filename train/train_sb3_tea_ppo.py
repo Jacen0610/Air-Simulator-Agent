@@ -49,7 +49,7 @@ def main():
 
     # --- 3. 定义 TEA-PPO 策略参数 ---
     policy_kwargs = dict(
-        features_extractor_class=TEA_Extractor_V2,
+        features_extractor_class=TEA_Extractor_V3,
         features_extractor_kwargs=dict(
             features_dim=512,
             embed_dim=128
