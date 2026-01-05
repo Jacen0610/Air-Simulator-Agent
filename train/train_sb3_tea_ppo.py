@@ -29,7 +29,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 20  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    TOTAL_EPISODES = 30  # TEA 结构较深，建议多跑一些 Episode 观察收敛
     GAMMA = 0.98
     SEQUENCE_LENGTH = 96
 
