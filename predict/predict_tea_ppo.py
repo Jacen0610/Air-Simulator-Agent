@@ -38,7 +38,7 @@ def main():
 
     # --- 配置 ---
     EVAL_EPISODES = 20  # 建议使用稍多的 episode 数量以获得更稳定的平均值
-    SEQUENCE_LENGTH = 32 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
+    SEQUENCE_LENGTH = 96 # 必须与训练脚本 train_sb3_tea_ppo.py 中的设置一致
     
     # --- 路径设置 ---
     # 检查训练脚本中可能存在的 models/models 嵌套路径
