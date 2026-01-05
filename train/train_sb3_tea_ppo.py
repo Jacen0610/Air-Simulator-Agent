@@ -89,7 +89,7 @@ def main():
         clip_range=0.2,
         gae_lambda=0.95,
         ent_coef=0.05,
-        vf_coef=0.3,
+        vf_coef=0.2,
         max_grad_norm=0.5,
         device="cuda",
         tensorboard_log="./sb3_logs/tea_ppo/train/"
