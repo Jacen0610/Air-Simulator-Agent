@@ -45,7 +45,7 @@ def main():
     ), n_envs=1)
 
     # 同步 Gamma 以适配 VecNormalize
-    env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
+    env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=GAMMA)
 
     # --- 3. 定义 TEA-PPO 策略参数 ---
     policy_kwargs = dict(
