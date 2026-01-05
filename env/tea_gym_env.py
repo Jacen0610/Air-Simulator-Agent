@@ -65,11 +65,11 @@ class TEAGymEnv(gym.Env):
         # 3. 【核心引导】重罚犹豫逻辑
         # 如果信道空闲(0.0)但动作是等待(0)，给予惩罚
         if current_is_busy == 0.0 and action == 0:
-            reward -= 2.0  # 强制打破 4-6 秒的犹豫期
+            reward -= 0.2  # 强制打破 4-6 秒的犹豫期
 
         # 如果抢占成功（在空闲瞬间发送），给予额外激励
         if current_is_busy == 0.0 and action == 1:
-            reward += 20.0
+            reward += 2.0  # 成功抢占，给予额外奖励
 
         terminated = done
         truncated = info.get("time_out", False)
