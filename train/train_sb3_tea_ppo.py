@@ -74,7 +74,7 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 1e-5
+    initial_lr = 1e-4
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
@@ -88,7 +88,7 @@ def main():
         n_epochs=3,  # 充分利用每批数据
         clip_range=0.2,
         gae_lambda=0.95,
-        ent_coef=0.01,
+        ent_coef=0.05,
         vf_coef=0.3,
         max_grad_norm=0.5,
         device="cuda",
