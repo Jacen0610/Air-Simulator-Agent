@@ -50,25 +50,37 @@ class TEA_Extractor_V2(BaseFeaturesExtractor):
         )
 
     def forward(self, observations):
-        # observations shape: (Batch, 96, 28)
+        # 0. 数值安全检查（可选，用于调试）
+        if torch.isnan(observations).any():
+            observations = torch.nan_to_num(observations)
 
-        # Step 1: 实时特征路径 (只取最后一帧的 28 维，含 16 位历史)
+        # Step 1: 实时特征路径
         latest_raw_obs = observations[:, -1, :]
-        latest_feature = self.latest_frame_projector(latest_raw_obs)  # (Batch, 64)
+        latest_feature = self.latest_frame_projector(latest_raw_obs)
 
         # Step 2: 序列投影
         x = self.projection(observations)
 
-        # Step 3: Attention (多头关注)
-        scanner_out, _ = self.instant_scanner(x, x, x)
-        refined_signals = self.attn_norm(x + scanner_out)
+        # Step 3: Attention 加固版 (Pre-LN)
+        # 先做 Norm，再进 Attention，防止 scanner_out 数值爆炸
+        x_norm = self.attn_norm(x)
+        scanner_out, _ = self.instant_scanner(x_norm, x_norm, x_norm)
+        # 残差连接
+        refined_signals = x + scanner_out
 
-        # Step 4: LSTM (长程大局观)
+        # Step 4: LSTM (增加梯度裁剪的物理基础)
+        self.long_term_memory.flatten_parameters()  # 优化内存并稳定梯度
         _, (h_n, _) = self.long_term_memory(refined_signals)
-        lstm_out = h_n[-1]  # (Batch, 192)
+        lstm_out = h_n[-1]
 
-        # Step 5: 融合。此时 lstm_out 知道“现在是密集区”，
-        # 而 latest_feature 看到“刚刚变绿 2ms”，两者竞争后产生决定性 Action。
-        combined = torch.cat([lstm_out, latest_feature], dim=-1)  # (Batch, 256)
+        # Step 5: 融合。在融合前对两路特征进行最后的尺度对齐
+        combined = torch.cat([lstm_out, latest_feature], dim=-1)
+
+        # 关键加固：在输出 logits 之前，增加一个 Final Norm
+        # 这能确保送入 Categorical 分布的 logits 不会出现天文数字
+        if not hasattr(self, 'final_norm'):
+            self.final_norm = nn.LayerNorm(256).to(combined.device)
+
+        combined = self.final_norm(combined)
 
         return self.fusion_layer(combined)
