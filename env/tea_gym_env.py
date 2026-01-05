@@ -59,18 +59,6 @@ class TEAGymEnv(gym.Env):
         # 1. 注入原始 0/1 序列特征
         refined_obs = self._inject_history(obs)
 
-        # 2. 获取当前核心状态 (最后一帧)
-        current_is_busy = obs[-1, 1]  # 1.0 为忙, 0.0 为空闲
-
-        # 3. 【核心引导】重罚犹豫逻辑
-        # 如果信道空闲(0.0)但动作是等待(0)，给予惩罚
-        if current_is_busy == 0.0 and action == 0:
-            reward -= 0.2  # 强制打破 4-6 秒的犹豫期
-
-        # 如果抢占成功（在空闲瞬间发送），给予额外激励
-        if current_is_busy == 0.0 and action == 1:
-            reward += 2.0  # 成功抢占，给予额外奖励
-
         terminated = done
         truncated = info.get("time_out", False)
         return refined_obs, float(reward), terminated, truncated, info
