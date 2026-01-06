@@ -29,8 +29,8 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 1. 参数设置 ---
-    TOTAL_EPISODES = 20  # TEA 结构较深，建议多跑一些 Episode 观察收敛
-    GAMMA = 0.98
+    TOTAL_EPISODES = 50  # TEA 结构较深，建议多跑一些 Episode 观察收敛
+    GAMMA = 0.95
     SEQUENCE_LENGTH = 96
 
     MODEL_DIR = os.path.join(project_root, "SB3/models")
@@ -74,7 +74,7 @@ def main():
         return func
 
     # 使用你建议的起始学习率
-    initial_lr = 1e-5
+    initial_lr = 1e-4
     # --- 4. 实例化模型 ---
     model = PPO(
         "MlpPolicy",
@@ -83,14 +83,15 @@ def main():
         verbose=0,
         learning_rate=linear_schedule(initial_lr),  # 这里应用线性衰减
         gamma=GAMMA,
-        n_steps=4096,  # 增加更新频率
+        n_steps=2048,  # 增加更新频率
         batch_size=512,  # 适配 FPS
-        n_epochs=1,  # 充分利用每批数据
+        n_epochs=10,  # 充分利用每批数据
         clip_range=0.2,
         gae_lambda=0.95,
         ent_coef=0.1,
         vf_coef=0.5,
         max_grad_norm=0.5,
+        target_kl=0.015,
         device="cuda",
         tensorboard_log="./sb3_logs/tea_ppo/train/"
     )
