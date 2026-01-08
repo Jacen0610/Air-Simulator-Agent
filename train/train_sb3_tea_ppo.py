@@ -74,7 +74,7 @@ def main():
 
         if args.fine_tune:
             print(">>> 模式: Fine-tune (收网) - 极低熵系数")
-            model.ent_coef = 0.001
+            model.ent_coef = 0.0005
 
             new_lr = 5e-5
             model.lr_schedule = lambda _: new_lr
