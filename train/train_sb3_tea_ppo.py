@@ -75,7 +75,15 @@ def main():
         if args.fine_tune:
             print(">>> 模式: Fine-tune (收网) - 极低熵系数")
             model.ent_coef = 0.001
-            model.learning_rate = 3e-5
+
+            new_lr = 5e-5
+            model.lr_schedule = lambda _: new_lr
+
+            # 2. 强制同步当前的优化器参数
+            for param_group in model.policy.optimizer.param_groups:
+                param_group['lr'] = new_lr
+
+            print(f">>> 成功斩断线性调度器，当前真实 LR 已锁定为: {new_lr}")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
