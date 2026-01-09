@@ -82,15 +82,15 @@ def main():
         if args.fine_tune:
             print(">>> 模式: Fine-tune (收网模式)")
 
-            env.training = False
+            env.training = True
             env.norm_reward = False
 
             # --- 按照警告建议修改：使用 ConstantSchedule ---
-            new_lr = 8e-6
+            new_lr = 1e-5
             model.lr_schedule = ConstantSchedule(new_lr)
             model.clip_range = ConstantSchedule(0.1)
 
-            model.ent_coef = 0.0006  # 这个依然保持 float
+            model.ent_coef = 0.0007  # 这个依然保持 float
 
             # 强制同步优化器
             for param_group in model.policy.optimizer.param_groups:
