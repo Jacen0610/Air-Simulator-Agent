@@ -87,7 +87,7 @@ def main():
 
             # 【关键修改 2】注入新的微调参数
             model.ent_coef = 0.0006  # 缓解僵硬，减少连点试探
-            model.clip_range = 0.1  # 缩窄更新幅度，保证稳定性
+            model.clip_range = lambda _: 0.1  # 缩窄更新幅度，保证稳定性
 
             new_lr = 8e-6  # 极其精细的步长
             model.lr_schedule = lambda _: new_lr
