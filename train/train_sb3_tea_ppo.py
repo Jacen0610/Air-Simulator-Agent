@@ -74,9 +74,10 @@ def main():
 
         if args.fine_tune:
             print(">>> 模式: Fine-tune (收网) - 极低熵系数")
-            model.ent_coef = 0.0005
+            model.ent_coef = 0.0006
+            model.clip_range = 0.1
 
-            new_lr = 5e-5
+            new_lr = 8e-6
             model.lr_schedule = lambda _: new_lr
 
             # 2. 强制同步当前的优化器参数
