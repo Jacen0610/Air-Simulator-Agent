@@ -15,6 +15,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.utils import constant_fn
 
 from agent.tea_feature_extractor import TEA_Extractor_V2
 from env.tea_gym_env import TEAGymEnv
@@ -83,14 +84,13 @@ def main():
 
             # 【关键修改 1】锁定 Stats，不再更新均值和方差，防止特征漂移导致无效动作激增
             env.training = False
-            env.norm_reward = False  # 微调阶段通常建议关闭奖励归一化，使用原始惩罚分
+            env.norm_reward = False # 微调阶段通常建议关闭奖励归一化，使用原始惩罚分
+            new_lr = 8e-6  # 极其精细的步长
 
             # 【关键修改 2】注入新的微调参数
             model.ent_coef = 0.0006  # 缓解僵硬，减少连点试探
-            model.clip_range = lambda _: 0.1  # 缩窄更新幅度，保证稳定性
-
-            new_lr = 8e-6  # 极其精细的步长
-            model.lr_schedule = lambda _: new_lr
+            model.clip_range = constant_fn(0.1)
+            model.lr_schedule = constant_fn(new_lr)
 
             # 强制同步优化器参数
             for param_group in model.policy.optimizer.param_groups:
