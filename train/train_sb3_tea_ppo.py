@@ -112,9 +112,19 @@ def main():
         )
         model = PPO(
             "MlpPolicy", env, policy_kwargs=policy_kwargs,
-            verbose=1, learning_rate=1e-4, gamma=GAMMA,
-            n_steps=2048, batch_size=512, n_epochs=10,
-            ent_coef=0.1, target_kl=0.015, device="cuda",
+            verbose=0,
+            learning_rate=1e-4,
+            gamma=GAMMA,
+            n_steps=2048,  # 增加更新频率
+            batch_size=512,  # 适配 FPS
+            n_epochs=10,  # 充分利用每批数据
+            clip_range=0.2,
+            gae_lambda=0.95,
+            ent_coef=0.1,
+            vf_coef=0.5,
+            max_grad_norm=0.5,
+            target_kl=0.015,
+            device="cuda",
             tensorboard_log="./sb3_logs/tea_ppo/train/"
         )
 

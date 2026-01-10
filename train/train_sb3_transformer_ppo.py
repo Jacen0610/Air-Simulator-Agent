@@ -98,7 +98,7 @@ def main():
 
     # --- 1. 核心参数设置 ---
     TOTAL_TRAINING_EPISODES = 50  # Transformer 需要略多一点的训练量
-    SEQUENCE_LENGTH = 32
+    SEQUENCE_LENGTH = 98
     FEATURES_DIM = 256  # Transformer 输出的特征向量长度
     EMBED_DIM = 128  # 内部 Embedding 维度
     GAMMA = 0.95
@@ -134,16 +134,17 @@ def main():
         env,
         policy_kwargs=policy_kwargs,
         verbose=0,
-        learning_rate=1e-5,  # 推荐值
-        gamma=GAMMA,  # 针对长周期
-        n_steps=16384,  # 每次更新采集的样本量
-        batch_size=2048, # 增加 Batch 以平滑碰撞脉冲
-        n_epochs=1, # 每次更新迭代10遍
-        ent_coef=0.0005,  # 稍作降低，让模型更聚焦于已发现的空隙
-        gae_lambda=0.8,
-        clip_range=0.1,
-        max_grad_norm=0.1,
-        vf_coef=0.1,
+        learning_rate=1e-4,
+        gamma=GAMMA,
+        n_steps=2048,  # 增加更新频率
+        batch_size=512,  # 适配 FPS
+        n_epochs=10,  # 充分利用每批数据
+        clip_range=0.2,
+        gae_lambda=0.95,
+        ent_coef=0.1,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
+        target_kl=0.015,
         device="cuda",
         tensorboard_log="./sb3_logs/transformer_ppo/"
     )
