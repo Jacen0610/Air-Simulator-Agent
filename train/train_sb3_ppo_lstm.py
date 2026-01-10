@@ -89,7 +89,7 @@ def main():
     # --- 配置 ---
     TRAIN_EPISODES = 50
     GAMMA = 0.95
-    SEQUENCE_LENGTH = 32
+    SEQUENCE_LENGTH = 96
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     PLOT_DIR = os.path.join(project_root, "SB3/plots/train")

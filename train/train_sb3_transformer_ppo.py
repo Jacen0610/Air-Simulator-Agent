@@ -98,7 +98,7 @@ def main():
 
     # --- 1. 核心参数设置 ---
     TOTAL_TRAINING_EPISODES = 50  # Transformer 需要略多一点的训练量
-    SEQUENCE_LENGTH = 98
+    SEQUENCE_LENGTH = 96
     FEATURES_DIM = 256  # Transformer 输出的特征向量长度
     EMBED_DIM = 128  # 内部 Embedding 维度
     GAMMA = 0.95
