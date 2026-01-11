@@ -134,17 +134,17 @@ def main():
         env,
         policy_kwargs=policy_kwargs,
         verbose=0,
-        learning_rate=1e-4,
+        learning_rate=5e-5,  # Transformer 建议用更小的初始学习率
         gamma=GAMMA,
-        n_steps=2048,  # 增加更新频率
-        batch_size=512,  # 适配 FPS
-        n_epochs=10,  # 充分利用每批数据
-        clip_range=0.2,
+        n_steps=2048,
+        batch_size=256,  # 减小 Batch Size 有时能提供更好的泛化梯度
+        n_epochs=10,
+        clip_range=0.1,  # 缩窄剪切范围，防止 16M 步时的剧烈跳变
         gae_lambda=0.95,
-        ent_coef=0.1,
-        vf_coef=0.5,
-        max_grad_norm=0.5,
-        target_kl=0.015,
+        ent_coef=0.01,  # 降低熵系数：16M步后不需要那么强的探索，0.1太高了
+        vf_coef=0.2,  # 降低价值损失权重，防止 Critic 带偏 Actor
+        max_grad_norm=0.3,  # 更加严格的梯度裁剪
+        target_kl=0.01,
         device="cuda",
         tensorboard_log="./sb3_logs/transformer_ppo/"
     )
