@@ -71,7 +71,6 @@ def main():
 
     # --- 配置 ---
     EVAL_EPISODES = 10
-    DUMP_FREQUENCY = 3000 # 每隔多少步写入一次日志
     
     # --- 使用绝对路径 ---
     MODEL_DIR = os.path.join(project_root, "SB3/models")
@@ -157,10 +156,6 @@ def main():
             episode_start=episode_starts,
             deterministic=True
         )
-
-        # --- 定期写入日志 ---
-        if total_steps % DUMP_FREQUENCY == 0:
-            model.logger.dump(step=total_steps)
 
         # 2. 执行环境步进
         obs, reward, done, info = env.step(action)
