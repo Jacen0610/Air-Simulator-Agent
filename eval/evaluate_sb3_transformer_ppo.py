@@ -78,8 +78,7 @@ def main():
 
     # --- 配置 ---
     EVAL_EPISODES = 10
-    SEQUENCE_LENGTH = 32 # 必须与训练脚本 train_sb3_attention_ppo.py 中的设置一致
-    DUMP_FREQUENCY = 600 # 每隔多少步写入一次日志
+    SEQUENCE_LENGTH = 96 # 必须与训练脚本 train_sb3_attention_ppo.py 中的设置一致
     
     # --- 使用基于项目根目录的绝对路径 ---
     # 对应 train_sb3_attention_ppo.py 中保存的文件名
@@ -146,37 +145,11 @@ def main():
     # --- 核心修正：适配 VecEnv 的自动重置行为 ---
     # 1. 在循环外只 reset 一次
     obs = env.reset()
-    
-    # 用于收集每个 episode 的统计数据
-    episode_values = []
-    episode_entropies = []
+
 
     # 2. 使用 while 循环，直到完成指定数量的 episodes
     while episodes_completed < EVAL_EPISODES:
         total_steps += 1 # 步数 +1
-        
-        # --- 获取价值估计和策略熵 ---
-        obs_tensor = th.as_tensor(obs).to(model.device)
-        with th.no_grad():
-            # 获取价值估计
-            values = model.policy.predict_values(obs_tensor)
-            current_value = values.item()
-            
-            # 获取策略分布并计算熵
-            distribution = model.policy.get_distribution(obs_tensor)
-            current_entropy = distribution.entropy().mean().item()
-
-            # 记录实时数据
-            model.logger.record("trace/step_entropy", current_entropy)
-            model.logger.record("trace/step_value", current_value)
-
-            episode_values.append(current_value)
-            episode_entropies.append(current_entropy)
-
-        # --- 定期写入日志 (关键修改) ---
-        if total_steps % DUMP_FREQUENCY == 0:
-            model.logger.dump(step=total_steps)
-
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         
@@ -188,26 +161,14 @@ def main():
             
             eval_rewards.append(original_episode_reward)
             
-            # 计算本 episode 的平均价值和平均熵
-            avg_value = np.mean(episode_values) if episode_values else 0.0
-            avg_entropy = np.mean(episode_entropies) if episode_entropies else 0.0
-            
             print(f"评估 Episode {episodes_completed}/{EVAL_EPISODES} | "
                   f"Reward: {original_episode_reward:.2f} | "
-                  f"Steps: {episode_length} | "
-                  f"Avg Value: {avg_value:.4f} | "
-                  f"Avg Entropy: {avg_entropy:.4f}")
+                  f"Steps: {episode_length}" )
             
             # --- 记录到 TensorBoard (使用 total_steps 作为 X 轴) ---
             model.logger.record("eval/reward", original_episode_reward)
             model.logger.record("eval/episode_length", episode_length)
-            model.logger.record("eval/mean_value_estimate", avg_value)
-            model.logger.record("eval/mean_entropy", avg_entropy)
             model.logger.dump(step=total_steps)
-            
-            # 重置统计列表
-            episode_values = []
-            episode_entropies = []
 
     # --- 4. 绘制并保存奖励图表 ---
     print("\n评估完成。正在绘制奖励图表...")
