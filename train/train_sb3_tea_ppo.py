@@ -80,32 +80,36 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: Fine-tune (消除碰撞保守模式)")
+            print(">>> 模式: 针对性避撞修正 (从最佳检查点回滚微调)")
 
-            # 1. 必须同步修改模型和环境的 Gamma (即使 norm_reward=False 也建议同步)
+            # 1. 视野设置：0.98 足以覆盖航空通信的退避观察窗
             model.gamma = 0.98
             env.gamma = 0.98
 
-            # 2. 保持 norm_reward=False，让 -10 惩罚保持原力
-            env.training = True  # 允许更新 Obs 统计（如果需要），但 Reward 不缩放
+            # 2. 核心保护：锁定归一化统计量 (关键！)
+            # 之前低流量无效动作多，正是因为 env.training=True 导致统计量在低负载区漂移了。
+            # 锁定它，让模型在“熟悉”的特征分布下专门学习避撞。
+            env.training = False
             env.norm_reward = False
 
-            # 3. 极低学习率 + 极小 Clip
-            new_lr = 5e-6
+            # 3. 学习率：1e-5 是修正策略的“黄金比例”
+            # 既能让模型感知到 0.98 带来的价值变化，又不会破坏已有的特征提取能力。
+            new_lr = 1e-5
             model.lr_schedule = ConstantSchedule(new_lr)
-            model.clip_range = ConstantSchedule(0.05)  # 更保守的剪切
 
-            # 4. 消除最后的随机性，解决无效动作
-            model.ent_coef = 0.0002
+            # 4. 容错率：稍微恢复熵系数
+            # 设置为 0.001。完全为 0 会让 TEA 模型太死板，容易在特定种子下陷入同步冲突。
+            model.ent_coef = 0.001
 
-            # 5. 降低 KL 目标，防止微调把模型练废
-            model.target_kl = 0.003
+            # 5. 限制策略偏移
+            model.clip_range = ConstantSchedule(0.1)
+            model.target_kl = 0.003  # 严格守住原有低无效动作的底线
 
             # 强制同步优化器
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
 
-            print(f">>> 核心参数重置完成。当前 Gamma: {model.gamma}, LR: {new_lr}")
+            print(f">>> 修正启动: Gamma=0.98, LR={new_lr}, Obs_Locked=True")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
