@@ -80,24 +80,32 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: Fine-tune (收网模式)")
+            print(">>> 模式: Fine-tune (消除碰撞保守模式)")
 
-            env.training = True
+            # 1. 必须同步修改模型和环境的 Gamma (即使 norm_reward=False 也建议同步)
+            model.gamma = 0.98
+            env.gamma = 0.98
+
+            # 2. 保持 norm_reward=False，让 -10 惩罚保持原力
+            env.training = True  # 允许更新 Obs 统计（如果需要），但 Reward 不缩放
             env.norm_reward = False
 
-            # --- 按照警告建议修改：使用 ConstantSchedule ---
-            new_lr = 1e-5
+            # 3. 极低学习率 + 极小 Clip
+            new_lr = 5e-6
             model.lr_schedule = ConstantSchedule(new_lr)
-            model.clip_range = ConstantSchedule(0.1)
+            model.clip_range = ConstantSchedule(0.05)  # 更保守的剪切
 
-            model.ent_coef = 0.0007  # 这个依然保持 float
+            # 4. 消除最后的随机性，解决无效动作
+            model.ent_coef = 0.0002
+
+            # 5. 降低 KL 目标，防止微调把模型练废
+            model.target_kl = 0.003
 
             # 强制同步优化器
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
 
-            print(
-                f">>> 核心参数已重置: LR={new_lr}, Clip={model.clip_range}, Ent={model.ent_coef}, Stats_Locked={not env.training}")
+            print(f">>> 核心参数重置完成。当前 Gamma: {model.gamma}, LR: {new_lr}")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
