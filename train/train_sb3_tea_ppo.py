@@ -1,3 +1,8 @@
+import warnings
+
+# 屏蔽 SB3 针对 GPU 运行 MLP/Transformer 策略的特定警告
+warnings.filterwarnings("ignore", message="You are trying to run PPO on the GPU, but it is primarily intended to run on the CPU")
+
 import os, sys
 import argparse
 import numpy as np
