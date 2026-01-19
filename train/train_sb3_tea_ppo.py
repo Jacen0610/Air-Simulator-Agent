@@ -80,36 +80,39 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 针对性避撞修正 (从最佳检查点回滚微调)")
+            print(">>> 模式: 零碰撞极速收网 (Final Precision Tuning)")
 
-            # 1. 视野设置：0.98 足以覆盖航空通信的退避观察窗
+            # 1. 视野设置：微调至 0.98
+            # 0.98 提供了足够的远见来预判高密度下的拥塞，同时避免 0.99 带来的低流量幻觉
             model.gamma = 0.98
             env.gamma = 0.98
 
-            # 2. 核心保护：锁定归一化统计量 (关键！)
-            # 之前低流量无效动作多，正是因为 env.training=True 导致统计量在低负载区漂移了。
-            # 锁定它，让模型在“熟悉”的特征分布下专门学习避撞。
+            # 2. 环境锁定：双重锁定 (关键中的关键)
+            # 严禁更新 Obs 统计量，防止高密度样本拉偏均值/方差
+            # 严禁奖励归一化，让碰撞带来的 -10 惩罚以“原始冲击力”直接作用于梯度
             env.training = False
             env.norm_reward = False
 
-            # 3. 学习率：1e-5 是修正策略的“黄金比例”
-            # 既能让模型感知到 0.98 带来的价值变化，又不会破坏已有的特征提取能力。
-            new_lr = 1e-5
+            # 3. 学习率：采用“冷冻式”微调
+            # 5e-6 左右的学习率能确保只改动模型最薄弱的避撞逻辑，而不影响成熟的时延逻辑
+            new_lr = 5e-6
             model.lr_schedule = ConstantSchedule(new_lr)
 
-            # 4. 容错率：稍微恢复熵系数
-            # 设置为 0.001。完全为 0 会让 TEA 模型太死板，容易在特定种子下陷入同步冲突。
-            model.ent_coef = 0.001
+            # 4. 动作稳定性：极小化探索与剪切
+            # 进一步降低熵系数，强制模型在高密度不确定时选择“不发”
+            model.ent_coef = 0.0001
+            # 限制策略更新幅度，防止修正碰撞时导致无效动作反弹
+            model.clip_range = ConstantSchedule(0.05)
 
-            # 5. 限制策略偏移
-            model.clip_range = ConstantSchedule(0.1)
-            model.target_kl = 0.003  # 严格守住原有低无效动作的底线
+            # 5. 严格散度约束
+            # 限制新老策略的 KL 散度，确保微调过程绝不“练废”
+            model.target_kl = 0.001
 
             # 强制同步优化器
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
 
-            print(f">>> 修正启动: Gamma=0.98, LR={new_lr}, Obs_Locked=True")
+            print(f">>> 最终修正配置: Gamma={model.gamma}, LR={new_lr}, Clip=0.05, Ent={model.ent_coef}")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
