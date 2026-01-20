@@ -85,39 +85,42 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 紧急平衡修正 + 长时序采样")
+            print(">>> 模式: 极高压稳定性修正 (针对 -8/-15 窄边际奖励)")
 
-            # 1. 核心参数修改
-            model.gamma = 0.97
-            env.gamma = 0.97
-            model.n_steps = 8192  # 修改为你想要的大小
+            # 1. 视野提升：放大碰撞的长远代价
+            model.gamma = 0.985
+            env.gamma = 0.985
+
+            # 2. 锁定与时序采样
+            env.training = False
+            env.norm_reward = False
+            model.n_steps = 8192
             model.batch_size = 256
 
-            # --- 关键修复步骤：重新初始化 Buffer ---
+            # 重新初始化 Buffer
             from stable_baselines3.common.buffers import RolloutBuffer
-
             model.rollout_buffer = RolloutBuffer(
-                model.n_steps,
-                model.observation_space,
-                model.action_space,
-                device=model.device,
-                gae_lambda=model.gae_lambda,
-                gamma=model.gamma,
-                n_envs=model.n_envs,
+                model.n_steps, model.observation_space, model.action_space,
+                device=model.device, gae_lambda=model.gae_lambda,
+                gamma=model.gamma, n_envs=model.n_envs,
             )
-            # ---------------------------------------
 
-            # 2. 其他优化参数同步
-            new_lr = 1e-5
-            model.lr_schedule = ConstantSchedule(new_lr)
-            model.clip_range = ConstantSchedule(0.15)
-            model.ent_coef = 0.001
+            # 3. 极低学习率 + 极小 Clip (核心：消除抖动)
+            # 用极小的步长去抠细节，不给它“乱投医”的波动空间
+            new_lr = 3e-6
+            model.clip_range = ConstantSchedule(0.03)
 
-            # 3. 强制更新优化器学习率
+            # 4. 彻底归零探索
+            # 强制模型只走最稳的那条路，消除高密度的随机试探
+            model.ent_coef = 0.0
+
+            # 5. 严格 KL 约束
+            model.target_kl = 0.0005
+
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
 
-            print(f">>> Buffer 重新初始化完成。当前 n_steps: {model.n_steps}")
+            print(f">>> 约束性微调启动。LR={new_lr}, Clip=0.03, Ent=0.0")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
