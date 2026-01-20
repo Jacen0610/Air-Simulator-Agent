@@ -85,39 +85,40 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 零碰撞极速收网 (Final Precision Tuning)")
+            print(">>> 模式: 紧急平衡修正 + 长时序采样 (解决高密度崩溃)")
 
-            # 1. 视野设置：微调至 0.98
-            # 0.98 提供了足够的远见来预判高密度下的拥塞，同时避免 0.99 带来的低流量幻觉
-            model.gamma = 0.98
-            env.gamma = 0.98
-
-            # 2. 环境锁定：双重锁定 (关键中的关键)
-            # 严禁更新 Obs 统计量，防止高密度样本拉偏均值/方差
-            # 严禁奖励归一化，让碰撞带来的 -10 惩罚以“原始冲击力”直接作用于梯度
+            # 1. 核心视野与环境锁定
+            model.gamma = 0.97
+            env.gamma = 0.97
             env.training = False
             env.norm_reward = False
 
-            # 3. 学习率：采用“冷冻式”微调
-            # 5e-6 左右的学习率能确保只改动模型最薄弱的避撞逻辑，而不影响成熟的时延逻辑
-            new_lr = 5e-6
+            # 2. 增大采样窗口与批次 (关键修改)
+            # 将 n_steps 从 2048 提升至 8192，让模型一次性观察更长的冲突规律
+            model.n_steps = 8192
+
+            # 相应地增大 batch_size。对于 Transformer，较大的 Batch 能提供更平滑的梯度
+            # 如果显存允许，建议 256 或 512；如果显存紧张，可维持 128
+            model.batch_size = 256
+
+            # 3. 学习率与策略修正空间
+            new_lr = 1e-5
             model.lr_schedule = ConstantSchedule(new_lr)
 
-            # 4. 动作稳定性：极小化探索与剪切
-            # 进一步降低熵系数，强制模型在高密度不确定时选择“不发”
-            model.ent_coef = 0.0001
-            # 限制策略更新幅度，防止修正碰撞时导致无效动作反弹
-            model.clip_range = ConstantSchedule(0.05)
+            # 放开 Clip 范围，配合大 n_steps，给予模型足够的空间跳出碰撞“陷阱”
+            model.clip_range = ConstantSchedule(0.15)
 
-            # 5. 严格散度约束
-            # 限制新老策略的 KL 散度，确保微调过程绝不“练废”
-            model.target_kl = 0.001
+            # 4. 恢复微量探索
+            # 0.001 的熵能防止模型在高负载下产生“决策死锁”
+            model.ent_coef = 0.001
 
-            # 强制同步优化器
+            # 5. 强制同步优化器参数
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
+                # 确保优化器也感知到 n_steps 带来的梯度变化频率调整
 
-            print(f">>> 最终修正配置: Gamma={model.gamma}, LR={new_lr}, Clip=0.05, Ent={model.ent_coef}")
+            print(f">>> Gamma: {model.gamma}, LR: {new_lr}")
+            print(f">>> n_steps: {model.n_steps}, batch_size: {model.batch_size}")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
