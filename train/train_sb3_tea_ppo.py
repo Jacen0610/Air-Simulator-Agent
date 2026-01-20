@@ -85,40 +85,39 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 紧急平衡修正 + 长时序采样 (解决高密度崩溃)")
+            print(">>> 模式: 紧急平衡修正 + 长时序采样")
 
-            # 1. 核心视野与环境锁定
+            # 1. 核心参数修改
             model.gamma = 0.97
             env.gamma = 0.97
-            env.training = False
-            env.norm_reward = False
-
-            # 2. 增大采样窗口与批次 (关键修改)
-            # 将 n_steps 从 2048 提升至 8192，让模型一次性观察更长的冲突规律
-            model.n_steps = 8192
-
-            # 相应地增大 batch_size。对于 Transformer，较大的 Batch 能提供更平滑的梯度
-            # 如果显存允许，建议 256 或 512；如果显存紧张，可维持 128
+            model.n_steps = 8192  # 修改为你想要的大小
             model.batch_size = 256
 
-            # 3. 学习率与策略修正空间
+            # --- 关键修复步骤：重新初始化 Buffer ---
+            from stable_baselines3.common.buffers import RolloutBuffer
+
+            model.rollout_buffer = RolloutBuffer(
+                model.n_steps,
+                model.observation_space,
+                model.action_space,
+                device=model.device,
+                gae_lambda=model.gae_lambda,
+                gamma=model.gamma,
+                n_envs=model.n_envs,
+            )
+            # ---------------------------------------
+
+            # 2. 其他优化参数同步
             new_lr = 1e-5
             model.lr_schedule = ConstantSchedule(new_lr)
-
-            # 放开 Clip 范围，配合大 n_steps，给予模型足够的空间跳出碰撞“陷阱”
             model.clip_range = ConstantSchedule(0.15)
-
-            # 4. 恢复微量探索
-            # 0.001 的熵能防止模型在高负载下产生“决策死锁”
             model.ent_coef = 0.001
 
-            # 5. 强制同步优化器参数
+            # 3. 强制更新优化器学习率
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
-                # 确保优化器也感知到 n_steps 带来的梯度变化频率调整
 
-            print(f">>> Gamma: {model.gamma}, LR: {new_lr}")
-            print(f">>> n_steps: {model.n_steps}, batch_size: {model.batch_size}")
+            print(f">>> Buffer 重新初始化完成。当前 n_steps: {model.n_steps}")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
