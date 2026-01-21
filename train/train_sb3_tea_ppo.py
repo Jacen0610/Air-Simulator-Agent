@@ -85,22 +85,24 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 稳健微调 (回退至 10无效1碰撞 节点)")
+            print(">>> 启动手术级微调: 锁定环境统计量")
 
-            # 2. 视野微调：0.975 是折中点
-            # 既比 0.95 更有远见，又不至于像 0.985 那样产生“静默恐惧”
-            model.gamma = 0.975
-            env.gamma = 0.975
+            # 1. 核心锁定：这是保护已有成果的关键
+            env.training = False  # 锁定状态空间归一化 (Obs Normalization)
+            env.norm_reward = False  # 锁定奖励空间归一化 (Reward Normalization)
 
-            # 3. 锁定环境：确保低流量区的稳定性
-            env.training = False
-            env.norm_reward = False
-
-            # 4. 效率平衡：选择 4096 采样窗
-            # 比 2048 更能看清高密度冲突，比 8192 更快 (提升 SPS)
+            # 2. 采样与视野 (基于 10/1 节点的最稳配置)
+            model.gamma = 0.97
             model.n_steps = 4096
-            model.batch_size = 128  # 降低 batch_size 以换取更高的 SPS
+            model.batch_size = 256
 
+            # 3. 极小步长修正
+            new_lr = 2e-6
+            model.lr_schedule = ConstantSchedule(new_lr)
+            model.clip_range = ConstantSchedule(0.05)
+            model.ent_coef = 0.0001  # 给极微量探索防止死锁
+
+            # 重新初始化 Buffer (必做，否则报错)
             from stable_baselines3.common.buffers import RolloutBuffer
             model.rollout_buffer = RolloutBuffer(
                 model.n_steps, model.observation_space, model.action_space,
@@ -108,22 +110,9 @@ def main():
                 gamma=model.gamma, n_envs=model.n_envs,
             )
 
-            # 5. 核心超参：稳健修正
-            # 学习率设为 8e-6，这比之前的 1e-5 更稳，比 3e-6 更有效
-            new_lr = 8e-6
-            model.lr_schedule = ConstantSchedule(new_lr)
-
-            # 适当收紧 Clip，防止高密度下的剧烈抖动
-            model.clip_range = ConstantSchedule(0.08)
-
-            # 给予微量探索，确保模型敢于在缝隙中发包
-            model.ent_coef = 0.0005
-
-            # 6. 强制同步优化器
+            # 同步学习率到优化器
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
-
-            print(f">>> 方案启动: n_steps=4096, LR={new_lr}, Gamma=0.975")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
