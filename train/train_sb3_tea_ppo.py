@@ -85,33 +85,35 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 纯端到端精修 (40w步锚定法)")
+            print(">>> 模式: 稳态探索微调 (补全 Env Gamma 同步)")
 
-            # 1. 环境与奖励统计量绝对锁定
+            # 1. 核心同步：这是防止 value_loss 异常的第一道关口
+            target_gamma = 0.97
+            model.gamma = target_gamma
+
+            # 强制同步 VecNormalize 环境中的统计 gamma
+            if hasattr(env, 'gamma'):
+                env.gamma = target_gamma
+                print(f">>> 已同步环境 Gamma 为: {target_gamma}")
+
+            # 2. 物理约束：防止 400 Loss 拆掉权重
+            model.max_grad_norm = 0.3  # 强制梯度裁剪
+            model.clip_range = ConstantSchedule(0.01)  # 极窄策略更新窗口
+
+            # 3. 锁定环境：保证 LOW 区不发生特征偏移
             env.training = False
             env.norm_reward = False
 
-            # 2. 统一 Gamma
-            target_gamma = 0.97
-            model.gamma = target_gamma
-            if hasattr(env, 'gamma'):
-                env.gamma = target_gamma
+            # 4. 学习率与探索抑制
+            new_lr = 5e-7
+            model.lr_schedule = ConstantSchedule(new_lr)
+            model.ent_coef = 0.0
 
-            # 3. 采样策略：增加 Batch Size
-            # 增加到 512。大的 Batch 能确保每次更新的梯度中，
-            # 既包含高密度的碰撞样本，也包含低密度的合规样本。
-            # 这种“样本对冲”是防止 LOW 区偏移的最佳手段。
-            model.n_steps = 4096
+            # 5. 大窗口采样：摊薄高压区的冲击信号
+            model.n_steps = 8192
             model.batch_size = 512
 
-            # 4. 极限更新约束
-            # 1e-6 的学习率配合 0.01 的 Clip，这是模型权重的“防弹衣”
-            new_lr = 1e-6
-            model.lr_schedule = ConstantSchedule(new_lr)
-            model.clip_range = ConstantSchedule(0.01)
-            model.ent_coef = 0.0  # 严禁任何随机扰动
-
-            # 5. 重建 Buffer
+            # 6. 重置 Buffer（必须带上新的 gamma）
             from stable_baselines3.common.buffers import RolloutBuffer
             model.rollout_buffer = RolloutBuffer(
                 model.n_steps, model.observation_space, model.action_space,
@@ -119,6 +121,7 @@ def main():
                 gamma=model.gamma, n_envs=model.n_envs,
             )
 
+            # 同步优化器学习率
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
         else:
