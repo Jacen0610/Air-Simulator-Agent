@@ -85,24 +85,32 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 启动手术级微调: 锁定环境统计量")
+            print(">>> 启动手术级微调: 锁定环境统计量并同步 Gamma")
 
-            # 1. 核心锁定：这是保护已有成果的关键
-            env.training = False  # 锁定状态空间归一化 (Obs Normalization)
-            env.norm_reward = False  # 锁定奖励空间归一化 (Reward Normalization)
+            # 1. 设置统一的 Gamma (0.97 是目前的基准平衡点)
+            target_gamma = 0.97
+            model.gamma = target_gamma
 
-            # 2. 采样与视野 (基于 10/1 节点的最稳配置)
-            model.gamma = 0.97
+            # 关键：同步 VecNormalize 环境中的 gamma 统计量
+            # 这确保了环境在处理奖励反馈时，使用的折现逻辑与模型完全一致
+            if hasattr(env, 'gamma'):
+                env.gamma = target_gamma
+
+            # 2. 核心锁定：保护 10/1 节点的成果
+            env.training = False
+            env.norm_reward = False
+
+            # 3. 采样配置
             model.n_steps = 4096
             model.batch_size = 256
 
-            # 3. 极小步长修正
+            # 4. 极小步长修正
             new_lr = 2e-6
             model.lr_schedule = ConstantSchedule(new_lr)
             model.clip_range = ConstantSchedule(0.05)
-            model.ent_coef = 0.0001  # 给极微量探索防止死锁
+            model.ent_coef = 0.0001
 
-            # 重新初始化 Buffer (必做，否则报错)
+            # 5. 重新初始化 Buffer
             from stable_baselines3.common.buffers import RolloutBuffer
             model.rollout_buffer = RolloutBuffer(
                 model.n_steps, model.observation_space, model.action_space,
@@ -110,9 +118,11 @@ def main():
                 gamma=model.gamma, n_envs=model.n_envs,
             )
 
-            # 同步学习率到优化器
+            # 6. 同步优化器学习率
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
+
+            print(f">>> 最终配置确认: Gamma同步={target_gamma}, LR={new_lr}, Env_Locked=True")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
