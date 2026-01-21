@@ -85,32 +85,33 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 启动手术级微调: 锁定环境统计量并同步 Gamma")
+            print(">>> 模式: 纯端到端精修 (40w步锚定法)")
 
-            # 1. 设置统一的 Gamma (0.97 是目前的基准平衡点)
-            target_gamma = 0.97
-            model.gamma = target_gamma
-
-            # 关键：同步 VecNormalize 环境中的 gamma 统计量
-            # 这确保了环境在处理奖励反馈时，使用的折现逻辑与模型完全一致
-            if hasattr(env, 'gamma'):
-                env.gamma = target_gamma
-
-            # 2. 核心锁定：保护 10/1 节点的成果
+            # 1. 环境与奖励统计量绝对锁定
             env.training = False
             env.norm_reward = False
 
-            # 3. 采样配置
+            # 2. 统一 Gamma
+            target_gamma = 0.97
+            model.gamma = target_gamma
+            if hasattr(env, 'gamma'):
+                env.gamma = target_gamma
+
+            # 3. 采样策略：增加 Batch Size
+            # 增加到 512。大的 Batch 能确保每次更新的梯度中，
+            # 既包含高密度的碰撞样本，也包含低密度的合规样本。
+            # 这种“样本对冲”是防止 LOW 区偏移的最佳手段。
             model.n_steps = 4096
-            model.batch_size = 256
+            model.batch_size = 512
 
-            # 4. 极小步长修正
-            new_lr = 2e-6
+            # 4. 极限更新约束
+            # 1e-6 的学习率配合 0.01 的 Clip，这是模型权重的“防弹衣”
+            new_lr = 1e-6
             model.lr_schedule = ConstantSchedule(new_lr)
-            model.clip_range = ConstantSchedule(0.05)
-            model.ent_coef = 0.0001
+            model.clip_range = ConstantSchedule(0.01)
+            model.ent_coef = 0.0  # 严禁任何随机扰动
 
-            # 5. 重新初始化 Buffer
+            # 5. 重建 Buffer
             from stable_baselines3.common.buffers import RolloutBuffer
             model.rollout_buffer = RolloutBuffer(
                 model.n_steps, model.observation_space, model.action_space,
@@ -118,11 +119,8 @@ def main():
                 gamma=model.gamma, n_envs=model.n_envs,
             )
 
-            # 6. 同步优化器学习率
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
-
-            print(f">>> 最终配置确认: Gamma同步={target_gamma}, LR={new_lr}, Env_Locked=True")
         else:
             print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
