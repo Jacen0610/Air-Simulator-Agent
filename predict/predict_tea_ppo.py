@@ -22,7 +22,7 @@ def main():
     # --- 解析命令行参数 ---
     parser = argparse.ArgumentParser(description='Fast-Evaluate SB3 TEA-PPO Agent')
     parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC server port')
-    parser.add_argument('--eval_episodes', type=int, default=20, help='评估的回合数量')
+    parser.add_argument('--eval_episodes', type=int, default=10, help='评估的回合数量')
 
     # 默认指向项目根目录下的 SB3/models/
     default_model_dir = os.path.join(project_root, "SB3/models")

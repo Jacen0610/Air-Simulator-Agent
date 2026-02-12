@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--fine_tune', action='store_true', help='是否开启低熵微调模式')
     parser.add_argument('--model_name', type=str, default='tea_ppo_final', help='加载的模型名(不带.zip)')
     parser.add_argument('--stats_name', type=str, default='tea_ppo_vec_norm.pkl', help='加载的Stats文件名')
-    parser.add_argument('--total_episodes', type=int, default=50, help='本次训练跑多少个回合')
+    parser.add_argument('--total_episodes', type=int, default=2, help='本次训练跑多少个回合')
     args = parser.parse_args()
 
     grpc_address = f'localhost:{args.grpc_port}'
@@ -85,35 +85,36 @@ def main():
         model = PPO.load(load_model_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 稳态探索微调 (补全 Env Gamma 同步)")
+            print(">>> 模式: 纯策略动力学微调 (不修改奖励函数，保证公平性)")
 
-            # 1. 核心同步：这是防止 value_loss 异常的第一道关口
+            # 1. 维持物理常数
             target_gamma = 0.97
             model.gamma = target_gamma
-
-            # 强制同步 VecNormalize 环境中的统计 gamma
             if hasattr(env, 'gamma'):
                 env.gamma = target_gamma
-                print(f">>> 已同步环境 Gamma 为: {target_gamma}")
 
-            # 2. 物理约束：防止 400 Loss 拆掉权重
-            model.max_grad_norm = 0.3  # 强制梯度裁剪
-            model.clip_range = ConstantSchedule(0.01)  # 极窄策略更新窗口
+            # 2. 物理约束：维持 0.3 的梯度裁剪，防止权重崩坏
+            model.max_grad_norm = 0.3
+            # clip_range 稍微放宽到 0.02，给模型修正“无效尝试”逻辑的空间
+            model.clip_range = ConstantSchedule(0.02)
 
-            # 3. 锁定环境：保证 LOW 区不发生特征偏移
+            # 3. 环境锁定 (严禁修改 Reward 参数)
             env.training = False
             env.norm_reward = False
 
-            # 4. 学习率与探索抑制
-            new_lr = 5e-7
+            # 4. 学习率：采用“脉冲式”小学习率
+            # 既然 5e-7 没动静，尝试稍微调高到 1e-6，再配合 20w 步自然退避
+            new_lr = 1e-6
             model.lr_schedule = ConstantSchedule(new_lr)
-            model.ent_coef = 0.0
 
-            # 5. 大窗口采样：摊薄高压区的冲击信号
-            model.n_steps = 8192
-            model.batch_size = 512
+            # 引入极微量熵增，打破策略僵化
+            model.ent_coef = 0.001
 
-            # 6. 重置 Buffer（必须带上新的 gamma）
+            # 5. 高频采样更新 (重点：缩短窗口)
+            model.n_steps = 2048  # 提高更新频率
+            model.batch_size = 256  # 配合小 n_steps
+
+            # 6. 重置 Buffer
             from stable_baselines3.common.buffers import RolloutBuffer
             model.rollout_buffer = RolloutBuffer(
                 model.n_steps, model.observation_space, model.action_space,
@@ -121,7 +122,7 @@ def main():
                 gamma=model.gamma, n_envs=model.n_envs,
             )
 
-            # 同步优化器学习率
+            # 同步优化器
             for param_group in model.policy.optimizer.param_groups:
                 param_group['lr'] = new_lr
         else:
