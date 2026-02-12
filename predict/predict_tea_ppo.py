@@ -15,7 +15,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
 
 from env.tea_gym_env import TEAGymEnv
-from agent.tea_feature_extractor import TEA_Extractor_V2
+from agent.tea_feature_extractor import TEA_Extractor_V3
 
 
 def main():

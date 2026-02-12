@@ -22,7 +22,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.utils import ConstantSchedule
 
-from agent.tea_feature_extractor import TEA_Extractor_V2
+from agent.tea_feature_extractor import TEA_Extractor_V3
 from env.tea_gym_env import TEAGymEnv
 
 
@@ -59,7 +59,7 @@ def main():
     grpc_address = f'localhost:{args.grpc_port}'
 
     # --- 2. 核心路径 ---
-    GAMMA = 0.95
+    GAMMA = 0.96
     SEQUENCE_LENGTH = 96
     MODEL_DIR = os.path.join(project_root, "SB3/models")
     os.makedirs(MODEL_DIR, exist_ok=True)
@@ -131,23 +131,28 @@ def main():
             env.training = True  # 继续学习环境特征
     else:
         print(f">>> 模式: New (全新训练) | 目标回合: {args.total_episodes}")
-        env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA)
+        env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA, clip_obs=10.0)
+
         policy_kwargs = dict(
-            features_extractor_class=TEA_Extractor_V2,
+            features_extractor_class=TEA_Extractor_V3,
             features_extractor_kwargs=dict(features_dim=512, embed_dim=128),
-            net_arch=dict(pi=[128, 64], vf=[512, 256])
+            # 加大 pi 网络的厚度，帮助模型学习精确的 CSMA 避让逻辑
+            net_arch=dict(pi=[256, 128], vf=[512, 256])
         )
+
         model = PPO(
-            "MlpPolicy", env, policy_kwargs=policy_kwargs,
-            verbose=0,
-            learning_rate=1e-4,
+            "MlpPolicy",
+            env,
+            policy_kwargs=policy_kwargs,
+            verbose=0,  # 建议设为 1，方便在终端实时观察 SPS(FPS) 和 Reward
+            learning_rate=1e-4,  # 全新训练用这个值是合理的
             gamma=GAMMA,
-            n_steps=2048,  # 增加更新频率
-            batch_size=512,  # 适配 FPS
-            n_epochs=10,  # 充分利用每批数据
+            n_steps=4096,  # 稍微增大采样窗口，覆盖更多背景流量周期
+            batch_size=1024,  # 13700 核心多，1024 效率更高，梯度更稳
+            n_epochs=10,
             clip_range=0.2,
             gae_lambda=0.95,
-            ent_coef=0.1,
+            ent_coef=0.01,  # 关键：从 0.1 降到 0.01，减少无谓的随机碰撞
             vf_coef=0.5,
             max_grad_norm=0.5,
             target_kl=0.015,

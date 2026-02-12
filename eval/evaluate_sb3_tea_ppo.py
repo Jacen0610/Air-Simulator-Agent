@@ -26,7 +26,7 @@ import time
 
 # 导入 TEA 相关的环境和特征提取器
 from env.tea_gym_env import TEAGymEnv
-from agent.tea_feature_extractor import TEA_Extractor_V2
+from agent.tea_feature_extractor import TEA_Extracto_V2
 
 def plot_evaluation_rewards(rewards: list, title: str, filename: str):
     """
