@@ -131,7 +131,7 @@ def main():
             env.training = True  # 继续学习环境特征
     else:
         print(f">>> 模式: New (全新训练) | 目标回合: {args.total_episodes}")
-        env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, gamma=GAMMA, clip_obs=10.0)
+        env = VecNormalize(vec_env, norm_obs=True, norm_reward=False, gamma=GAMMA)
 
         policy_kwargs = dict(
             features_extractor_class=TEA_Extractor_V3,
