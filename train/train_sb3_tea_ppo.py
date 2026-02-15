@@ -1,13 +1,12 @@
 import warnings
 
-# 屏蔽 SB3 针对 GPU 运行 MLP/Transformer 策略的特定警告
-warnings.filterwarnings("ignore", message="You are trying to run PPO on the GPU, but it is primarily intended to run on the CPU")
+warnings.filterwarnings("ignore", message="You are trying to run PPO on the GPU")
 
 import os, sys
 import argparse
 import numpy as np
-from typing import Callable
 from datetime import datetime
+import torch as th
 
 # --- 动态添加项目根目录 ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,173 +14,128 @@ project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import torch as th
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.utils import ConstantSchedule
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+from stable_baselines3.common.utils import get_linear_fn, ConstantSchedule
 
 from agent.tea_feature_extractor import TEA_Extractor_V3
 from env.tea_gym_env import TEAGymEnv
 
 
-# --- 自定义回合控制 Callback ---
-class EpisodeControlCallback(BaseCallback):
-    def __init__(self, max_episodes: int, verbose=0):
+# --- 自定义评估：每 N 个 Episode 考试一次 ---
+class EveryNEpisodesEvalCallback(BaseCallback):
+    def __init__(self, eval_env, n_episodes: int, save_path: str, verbose=1):
         super().__init__(verbose)
-        self.max_episodes = max_episodes
+        self.eval_env = eval_env
+        self.n_episodes = n_episodes
+        self.save_path = save_path
         self.episode_count = 0
+        self.best_mean_reward = -np.inf
+        os.makedirs(save_path, exist_ok=True)
 
     def _on_step(self) -> bool:
         if self.locals['dones'][0]:
             self.episode_count += 1
-            if self.verbose > 0:
-                print(f"进度: 第 {self.episode_count}/{self.max_episodes} 个回合完成")
+            if self.episode_count % self.n_episodes == 0:
+                print(f"\n>>> 触发第 {self.episode_count} 回合确定性评估...")
 
-            if self.episode_count >= self.max_episodes:
-                print(f">>> 已达到目标回合数 {self.max_episodes}，停止训练并保存...")
-                return False
+                episode_reward = 0
+                obs = self.eval_env.reset()
+                done = False
+                while not done:
+                    action, _ = self.model.predict(obs, deterministic=True)
+                    obs, reward, done, info = self.eval_env.step(action)
+                    episode_reward += reward[0]
+
+                print(f">>> 评估得分: {episode_reward:.2f}")
+
+                if episode_reward > self.best_mean_reward:
+                    self.best_mean_reward = episode_reward
+                    self.model.save(os.path.join(self.save_path, "best_model.zip"))
+                    self.eval_env.save(os.path.join(self.save_path, "best_model_stats.pkl"))
+                    print(f"★ 发现历史最高得分，已更新 best_model.zip")
         return True
 
 
+# --- 主训练流程 ---
 def main():
-    # --- 1. 解析命令行参数 ---
-    parser = argparse.ArgumentParser(description='Train SB3 TEA-PPO Agent')
-    parser.add_argument('--grpc_port', type=str, default='50051', help='gRPC port')
-    parser.add_argument('--continue_train', action='store_true', help='是否加载模型继续训练')
-    parser.add_argument('--fine_tune', action='store_true', help='是否开启低熵微调模式')
-    parser.add_argument('--model_name', type=str, default='tea_ppo_final', help='加载的模型名(不带.zip)')
-    parser.add_argument('--stats_name', type=str, default='tea_ppo_vec_norm.pkl', help='加载的Stats文件名')
-    parser.add_argument('--total_episodes', type=int, default=2, help='本次训练跑多少个回合')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--grpc_port', type=str, default='50051')
+    parser.add_argument('--continue_train', action='store_true')
+    parser.add_argument('--fine_tune', action='store_true')
+    parser.add_argument('--model_name', type=str, default='tea_ppo_final')
+    parser.add_argument('--total_episodes', type=int, default=30)
     args = parser.parse_args()
 
-    grpc_address = f'localhost:{args.grpc_port}'
-
-    # --- 2. 核心路径 ---
-    GAMMA = 0.96
-    SEQUENCE_LENGTH = 96
+    # 配置
+    GAMMA = 0.97
     MODEL_DIR = os.path.join(project_root, "SB3/models")
+    LOG_DIR = "./sb3_logs/tea_ppo/train/"
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    # 加载路径
-    load_model_path = os.path.join(MODEL_DIR, args.model_name)
-    load_stats_path = os.path.join(MODEL_DIR, args.stats_name)
-
-    # --- 3. 环境初始化 ---
+    # 环境
     vec_env = make_vec_env(lambda: TEAGymEnv(
-        grpc_server_address=grpc_address,
-        sequence_length=SEQUENCE_LENGTH
+        grpc_server_address=f'localhost:{args.grpc_port}',
+        sequence_length=96
     ), n_envs=1)
 
-    # --- 4. 模型加载或新建 ---
-    if args.continue_train and os.path.exists(load_model_path + ".zip"):
-        print(f"载入模型: {load_model_path} | 载入Stats: {load_stats_path}")
+    # 逻辑判断
+    if (args.continue_train or args.fine_tune) and os.path.exists(os.path.join(MODEL_DIR, args.model_name + ".zip")):
+        # 加载逻辑
+        load_path = os.path.join(MODEL_DIR, args.model_name)
+        stats_path = os.path.join(MODEL_DIR, f"{args.model_name}_stats.pkl")
 
-        # 加载归一化统计数据
-        env = VecNormalize.load(load_stats_path, vec_env)
-
-        # 加载PPO模型
-        model = PPO.load(load_model_path, env=env, device="cuda")
+        env = VecNormalize.load(stats_path, vec_env)
+        model = PPO.load(load_path, env=env, device="cuda")
 
         if args.fine_tune:
-            print(">>> 模式: 纯策略动力学微调 (不修改奖励函数，保证公平性)")
-
-            # 1. 维持物理常数
-            target_gamma = 0.97
-            model.gamma = target_gamma
-            if hasattr(env, 'gamma'):
-                env.gamma = target_gamma
-
-            # 2. 物理约束：维持 0.3 的梯度裁剪，防止权重崩坏
-            model.max_grad_norm = 0.3
-            # clip_range 稍微放宽到 0.02，给模型修正“无效尝试”逻辑的空间
-            model.clip_range = ConstantSchedule(0.02)
-
-            # 3. 环境锁定 (严禁修改 Reward 参数)
-            env.training = False
-            env.norm_reward = False
-
-            # 4. 学习率：采用“脉冲式”小学习率
-            # 既然 5e-7 没动静，尝试稍微调高到 1e-6，再配合 20w 步自然退避
-            new_lr = 1e-6
-            model.lr_schedule = ConstantSchedule(new_lr)
-
-            # 引入极微量熵增，打破策略僵化
-            model.ent_coef = 0.001
-
-            # 5. 高频采样更新 (重点：缩短窗口)
-            model.n_steps = 2048  # 提高更新频率
-            model.batch_size = 256  # 配合小 n_steps
-
-            # 6. 重置 Buffer
-            from stable_baselines3.common.buffers import RolloutBuffer
-            model.rollout_buffer = RolloutBuffer(
-                model.n_steps, model.observation_space, model.action_space,
-                device=model.device, gae_lambda=model.gae_lambda,
-                gamma=model.gamma, n_envs=model.n_envs,
-            )
-
-            # 同步优化器
-            for param_group in model.policy.optimizer.param_groups:
-                param_group['lr'] = new_lr
+            print(">>> 执行改进版微调策略...")
+            model.ent_coef = 0.05  # 注入探索熵
+            model.learning_rate = 5e-5  # 脉冲学习率
+            model.gamma = 0.99  # 强化长线时延意识
+            model.clip_range = ConstantSchedule(0.2)
+            env.norm_reward = False  # 确保惩罚真实
         else:
-            print(">>> 模式: Continue (追加训练)")
             model.learning_rate = 1e-4
-            env.training = True  # 继续学习环境特征
     else:
-        print(f">>> 模式: New (全新训练) | 目标回合: {args.total_episodes}")
+        # 全新训练
         env = VecNormalize(vec_env, norm_obs=True, norm_reward=False, gamma=GAMMA)
-
         policy_kwargs = dict(
             features_extractor_class=TEA_Extractor_V3,
             features_extractor_kwargs=dict(features_dim=512, embed_dim=128),
-            # 加大 pi 网络的厚度，帮助模型学习精确的 CSMA 避让逻辑
             net_arch=dict(pi=[256, 128], vf=[512, 256])
         )
+        SPS = 300
+        TOTAL_STEPS = args.total_episodes * 40 * 60 * SPS
+        lr_schedule = get_linear_fn(1e-4, 1e-6, TOTAL_STEPS)
+        model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=0,
+                    learning_rate=lr_schedule,
+                    gamma=GAMMA,
+                    n_steps=8192,
+                    batch_size=1024,
+                    n_epochs=10,
+                    ent_coef=0.02,
+                    clip_range=0.2,
+                    gae_lambda=0.95,
+                    vf_coef=0.5,
+                    max_grad_norm=0.5,
+                    target_kl=0.015,
+                    device="cuda",
+                    tensorboard_log=LOG_DIR)
 
-        model = PPO(
-            "MlpPolicy",
-            env,
-            policy_kwargs=policy_kwargs,
-            verbose=0,  # 建议设为 1，方便在终端实时观察 SPS(FPS) 和 Reward
-            learning_rate=1e-4,  # 全新训练用这个值是合理的
-            gamma=GAMMA,
-            n_steps=4096,  # 稍微增大采样窗口，覆盖更多背景流量周期
-            batch_size=1024,  # 13700 核心多，1024 效率更高，梯度更稳
-            n_epochs=10,
-            clip_range=0.2,
-            gae_lambda=0.95,
-            ent_coef=0.01,  # 关键：从 0.1 降到 0.01，减少无谓的随机碰撞
-            vf_coef=0.5,
-            max_grad_norm=0.5,
-            target_kl=0.015,
-            device="cuda",
-            tensorboard_log="./sb3_logs/tea_ppo/train/"
-        )
+    # Callback
+    eval_cb = EveryNEpisodesEvalCallback(env, n_episodes=5, save_path=os.path.join(MODEL_DIR, "tea_best_model_v3"))
 
-    # --- 5. 训练执行 ---
-    episode_callback = EpisodeControlCallback(max_episodes=args.total_episodes, verbose=1)
-
+    # 启动
     try:
-        model.learn(total_timesteps=int(1e10), callback=episode_callback, tb_log_name="TEA_PPO_v2_FT")
+        # 这里用 step 数占位，实际由模拟器的 done 信号控制
+        model.learn(total_timesteps=int(1e10), callback=eval_cb)
     finally:
-        # --- 6. 自动化命名保存 (年月日_时分) ---
-        mode_tag = "finetuned" if args.fine_tune else "continued" if args.continue_train else "initial"
-        time_suffix = datetime.now().strftime("%Y%m%d_%H%M")
-
-        final_save_name = f"tea_ppo_{mode_tag}_{time_suffix}"
-
-        # 保存模型权重
-        model.save(os.path.join(MODEL_DIR, final_save_name))
-        # 保存对应的环境统计数据 (每个模型一个专属Stats)
-        env.save(os.path.join(MODEL_DIR, f"{final_save_name}_stats.pkl"))
-
-        print("-" * 50)
-        print(f"训练任务结束!")
-        print(f"模型文件: {final_save_name}.zip")
-        print(f"统计文件: {final_save_name}_stats.pkl")
-        print("-" * 50)
+        suffix = datetime.now().strftime("%Y%m%d_%H%M")
+        model.save(os.path.join(MODEL_DIR, f"tea_final_{suffix}"))
+        env.save(os.path.join(MODEL_DIR, f"tea_final_{suffix}_stats.pkl"))
         env.close()
 
 
