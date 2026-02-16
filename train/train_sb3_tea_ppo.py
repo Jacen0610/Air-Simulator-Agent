@@ -68,7 +68,7 @@ def main():
     args = parser.parse_args()
 
     # --- 物理步数与学习率校准 ---
-    SPS = 250 if args.n_steps >= 8192 else 300
+    SPS = 300 if args.n_steps >= 8192 else 400
     STEPS_PER_EPISODE = SPS * 60 * 40
     TOTAL_STEPS = STEPS_PER_EPISODE * args.total_episodes
 
