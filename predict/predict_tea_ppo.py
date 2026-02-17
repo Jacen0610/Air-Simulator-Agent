@@ -29,14 +29,13 @@ def main():
 
     # 用户只需输入文件名，无需输入路径和后缀
     parser.add_argument('--model_name', type=str, default='tea_ppo_final', help='模型文件名 (不带.zip)')
-    parser.add_argument('--stats_name', type=str, default='tea_ppo_vec_norm', help='统计文件名 (不带.pkl)')
 
     args = parser.parse_args()
     grpc_address = f'localhost:{args.grpc_port}'
 
     # --- 拼接完整路径 ---
     MODEL_PATH = os.path.join(default_model_dir, f"{args.model_name}.zip")
-    STATS_PATH = os.path.join(default_model_dir, f"{args.stats_name}.pkl")
+    STATS_PATH = os.path.join(default_model_dir, f"{args.model_name}_stats.pkl")
 
     # 检查文件是否存在
     if not os.path.exists(MODEL_PATH):
