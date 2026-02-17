@@ -49,7 +49,7 @@ def main():
     SEQUENCE_LENGTH = 96
 
     # --- 1. 创建并加载归一化环境 ---
-    print(f"正在从 {default_model_dir} 加载环境统计: {args.stats_name}.pkl")
+    print(f"正在从 {default_model_dir} 加载环境统计: {args.model_name}.pkl")
 
     env_lambda = lambda: Monitor(TEAGymEnv(grpc_server_address=grpc_address, sequence_length=SEQUENCE_LENGTH))
     base_vec_env = DummyVecEnv([env_lambda])
