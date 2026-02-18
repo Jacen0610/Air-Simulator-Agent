@@ -55,24 +55,50 @@ def main():
     parser.add_argument('--episodes', type=int, default=5)
     args = parser.parse_args()
 
-    # --- 自动推导 Stats 路径 ---
-    # 假设你的 stats 命名规则是 stats_epXX_XXXX.pkl 或 tea_epXX_XXXX_stats.pkl
-    # 这里我们优先寻找与模型文件名对应的 .pkl 文件
+    # --- [改进] 自动推导 Stats 路径的稳健逻辑 ---
     model_path = args.model_name
     model_dir = os.path.dirname(model_path)
     model_filename = os.path.basename(model_path)
+    model_base_name = model_filename.replace(".zip", "")
 
-    # 尝试常见的命名映射逻辑：
-    # 1. 直接替换后缀 2. 处理 stats_ 前缀
-    stats_path = model_path.replace(".zip", ".pkl")
-    if not os.path.exists(stats_path):
-        # 针对你提到的 stats 命名可能略有不同的逻辑尝试
-        potential_name = model_filename.replace("tea_", "stats_").replace(".zip", ".pkl")
-        stats_path = os.path.join(model_dir, potential_name)
+    stats_path = None
+    pkl_files_found = []
 
-    if not os.path.exists(stats_path):
-        raise FileNotFoundError(
-            f"未找到配套的 Stats 文件: {stats_path}\n请确保 .pkl 文件与 .zip 在同一目录下且名字匹配。")
+    # 策略 1: 寻找文件名包含模型基础名的 .pkl 文件
+    try:
+        # 确保目录存在且可读
+        if os.path.isdir(model_dir):
+            files_in_dir = os.listdir(model_dir)
+            pkl_files_found = [f for f in files_in_dir if f.endswith(".pkl")]
+
+            # 寻找最直接的匹配
+            for pkl_file in pkl_files_found:
+                if model_base_name in pkl_file:
+                    stats_path = os.path.join(model_dir, pkl_file)
+                    break
+    except Exception as e:
+        print(f"Warning: 无法扫描目录 '{model_dir}'。错误: {e}")
+
+    # 策略 2: 如果没找到，但目录里只有一个 .pkl 文件，就用它
+    if stats_path is None and len(pkl_files_found) == 1:
+        stats_path = os.path.join(model_dir, pkl_files_found[0])
+
+    # 策略 3: 如果新策略失败，尝试旧的、直接的替换逻辑
+    if stats_path is None or not os.path.exists(stats_path):
+        stats_path_alt = model_path.replace(".zip", ".pkl")
+        if os.path.exists(stats_path_alt):
+            stats_path = stats_path_alt
+
+    # 最终检查
+    if stats_path is None or not os.path.exists(stats_path):
+        error_msg = f"错误: 未找到与 '{model_filename}' 配套的 Stats (.pkl) 文件。\n"
+        error_msg += f"  - 尝试在目录 '{model_dir}' 中寻找相关文件。\n"
+        if pkl_files_found:
+            error_msg += f"  - 在目录中找到了以下 .pkl 文件: {pkl_files_found}\n"
+        else:
+            error_msg += f"  - 在目录中未找到任何 .pkl 文件。\n"
+        error_msg += "请确保 VecNormalize 的 .pkl 文件与模型 .zip 文件在同一目录下。"
+        raise FileNotFoundError(error_msg)
 
     print(f"📦 匹配成功！\n模型: {model_filename}\n参数: {os.path.basename(stats_path)}")
 
