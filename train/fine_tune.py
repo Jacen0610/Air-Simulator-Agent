@@ -50,7 +50,7 @@ class FineTuneCallback(BaseCallback):
 def main():
     parser = argparse.ArgumentParser()
     # 只需要传入模型路径
-    parser.add_argument('--model_name', type=str, required=True, help="模型文件名 (例如: tea_ppo_final.zip)")
+    parser.add_argument('--model_name', type=str, required=True, help="模型文件名 (例如: tea_ppo_final)")
     parser.add_argument('--port', type=int, default=50051)
     parser.add_argument('--episodes', type=int, default=5)
     args = parser.parse_args()
@@ -59,17 +59,22 @@ def main():
     # 定义默认的模型存储目录
     DEFAULT_MODELS_DIR = os.path.join(project_root, "SB3", "models")
     
-    # 1. 尝试直接使用用户提供的路径
-    if os.path.exists(args.model_name):
-        model_path = args.model_name
+    # [新增] 自动补全 .zip 后缀
+    input_name = args.model_name
+    if not input_name.endswith(".zip"):
+        input_name += ".zip"
+    
+    # 1. 尝试直接使用用户提供的路径 (处理用户可能输入了带路径的文件名)
+    if os.path.exists(input_name):
+        model_path = input_name
     # 2. 尝试在 SB3/models 下查找
-    elif os.path.exists(os.path.join(DEFAULT_MODELS_DIR, args.model_name)):
-        model_path = os.path.join(DEFAULT_MODELS_DIR, args.model_name)
+    elif os.path.exists(os.path.join(DEFAULT_MODELS_DIR, input_name)):
+        model_path = os.path.join(DEFAULT_MODELS_DIR, input_name)
     # 3. 尝试在 SB3/models/models 下查找 (处理可能的嵌套)
-    elif os.path.exists(os.path.join(DEFAULT_MODELS_DIR, "models", args.model_name)):
-        model_path = os.path.join(DEFAULT_MODELS_DIR, "models", args.model_name)
+    elif os.path.exists(os.path.join(DEFAULT_MODELS_DIR, "models", input_name)):
+        model_path = os.path.join(DEFAULT_MODELS_DIR, "models", input_name)
     else:
-        raise FileNotFoundError(f"无法找到模型文件: {args.model_name}\n已搜索路径:\n - {os.path.abspath(args.model_name)}\n - {DEFAULT_MODELS_DIR}")
+        raise FileNotFoundError(f"无法找到模型文件: {input_name}\n已搜索路径:\n - {os.path.abspath(input_name)}\n - {DEFAULT_MODELS_DIR}")
 
     # --- [改进] 自动推导 Stats 路径的稳健逻辑 ---
     model_dir = os.path.dirname(model_path)
@@ -135,7 +140,11 @@ def main():
     model.lr_schedule = ConstantSchedule(new_lr)  # 锁定学习率
     model.ent_coef = 0.001
     model.gae_lambda = 0.98
-    model.clip_range = 0.1
+    
+    # [修复] clip_range 必须是一个函数 (schedule)
+    model.clip_range = ConstantSchedule(0.1)
+    
+    # [确认] 设置 target_kl
     model.target_kl = 0.003
 
     # 强制更新优化器参数组
@@ -150,8 +159,8 @@ def main():
         config={
             "learning_rate": model.learning_rate,
             "ent_coef": model.ent_coef,
-            "clip_range": model.clip_range,
-            "target_kl": model.target_kl,
+            "clip_range": 0.1, # 记录数值即可
+            "target_kl": model.target_kl, # 记录 target_kl
             "base_model": model_filename,
             "episodes": args.episodes,
             "port": args.port
