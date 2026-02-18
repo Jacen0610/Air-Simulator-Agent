@@ -50,13 +50,28 @@ class FineTuneCallback(BaseCallback):
 def main():
     parser = argparse.ArgumentParser()
     # 只需要传入模型路径
-    parser.add_argument('--model_name', type=str, required=True, help="模型路径 (.zip)")
+    parser.add_argument('--model_name', type=str, required=True, help="模型文件名 (例如: tea_ppo_final.zip)")
     parser.add_argument('--port', type=int, default=50051)
     parser.add_argument('--episodes', type=int, default=5)
     args = parser.parse_args()
 
+    # --- [改进] 智能模型路径解析 ---
+    # 定义默认的模型存储目录
+    DEFAULT_MODELS_DIR = os.path.join(project_root, "SB3", "models")
+    
+    # 1. 尝试直接使用用户提供的路径
+    if os.path.exists(args.model_name):
+        model_path = args.model_name
+    # 2. 尝试在 SB3/models 下查找
+    elif os.path.exists(os.path.join(DEFAULT_MODELS_DIR, args.model_name)):
+        model_path = os.path.join(DEFAULT_MODELS_DIR, args.model_name)
+    # 3. 尝试在 SB3/models/models 下查找 (处理可能的嵌套)
+    elif os.path.exists(os.path.join(DEFAULT_MODELS_DIR, "models", args.model_name)):
+        model_path = os.path.join(DEFAULT_MODELS_DIR, "models", args.model_name)
+    else:
+        raise FileNotFoundError(f"无法找到模型文件: {args.model_name}\n已搜索路径:\n - {os.path.abspath(args.model_name)}\n - {DEFAULT_MODELS_DIR}")
+
     # --- [改进] 自动推导 Stats 路径的稳健逻辑 ---
-    model_path = args.model_name
     model_dir = os.path.dirname(model_path)
     model_filename = os.path.basename(model_path)
     model_base_name = model_filename.replace(".zip", "")
@@ -92,7 +107,7 @@ def main():
     # 最终检查
     if stats_path is None or not os.path.exists(stats_path):
         error_msg = f"错误: 未找到与 '{model_filename}' 配套的 Stats (.pkl) 文件。\n"
-        error_msg += f"  - 尝试在目录 '{model_dir}' 中寻找相关文件。\n"
+        error_msg += f"  - 搜索目录: '{model_dir}'\n"
         if pkl_files_found:
             error_msg += f"  - 在目录中找到了以下 .pkl 文件: {pkl_files_found}\n"
         else:
@@ -100,7 +115,7 @@ def main():
         error_msg += "请确保 VecNormalize 的 .pkl 文件与模型 .zip 文件在同一目录下。"
         raise FileNotFoundError(error_msg)
 
-    print(f"📦 匹配成功！\n模型: {model_filename}\n参数: {os.path.basename(stats_path)}")
+    print(f"📦 匹配成功！\n模型: {model_path}\n参数: {stats_path}")
 
     # --- 环境与模型配置 ---
     # 修改保存路径到 SB3/models/finetune_precision_results
@@ -121,6 +136,7 @@ def main():
     model.ent_coef = 0.001
     model.gae_lambda = 0.98
     model.clip_range = 0.1
+    model.target_kl = 0.003
 
     # 强制更新优化器参数组
     for param_group in model.policy.optimizer.param_groups:
