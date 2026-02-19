@@ -135,17 +135,17 @@ def main():
     model = PPO.load(model_path, env=env, device="cuda" if th.cuda.is_available() else "cpu", tensorboard_log=f"./runs/{model_filename}_ft")
 
     # 手术级去噪参数
-    new_lr = 5e-6
+    new_lr = 8e-6
     model.learning_rate = new_lr
     model.lr_schedule = ConstantSchedule(new_lr)  # 锁定学习率
-    model.ent_coef = 0.001
+    model.ent_coef = 0.005
     model.gae_lambda = 0.98
     
     # [修复] clip_range 必须是一个函数 (schedule)
-    model.clip_range = ConstantSchedule(0.1)
+    model.clip_range = ConstantSchedule(0.15)
     
     # [确认] 设置 target_kl
-    model.target_kl = 0.003
+    model.target_kl = 0.008
 
     # 强制更新优化器参数组
     for param_group in model.policy.optimizer.param_groups:
