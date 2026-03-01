@@ -135,35 +135,42 @@ def main():
     model = PPO.load(model_path, env=env, device="cuda" if th.cuda.is_available() else "cpu", tensorboard_log=f"./runs/{model_filename}_ft")
 
     # 手术级去噪参数
-    new_lr = 8e-6
+    new_lr = 5e-6
     model.learning_rate = new_lr
-    model.lr_schedule = ConstantSchedule(new_lr)  # 锁定学习率
-    model.ent_coef = 0.005
-    model.gae_lambda = 0.98
-    
-    # [修复] clip_range 必须是一个函数 (schedule)
-    model.clip_range = ConstantSchedule(0.15)
-    
-    # [确认] 设置 target_kl
-    model.target_kl = 0.008
+    model.lr_schedule = ConstantSchedule(new_lr)
+
+    # 2. 压低熵系数：消除决策犹豫，让动作非0即1（解决碰撞的关键）
+    # 从 0.005 降至 0.001
+    model.ent_coef = 0.001
+
+    # 3. 调低 GAE Lambda：缩短优势估计的时域，使其对“这一秒”的时延剧增极其敏感
+    # 从 0.98 降至 0.88 (这是一个显著的改动，能加强模型对即时接入时延抬头的恐惧感)
+    model.gae_lambda = 0.88
+
+    # 4. 收紧 Clip Range：限制策略变动的幅度，防止单次抖动样本带偏整体策略
+    # 从 0.15 降至 0.10
+    model.clip_range = ConstantSchedule(0.10)
+
+    # 5. 设置更严苛的 Target KL：确保策略更新极其平稳
+    model.target_kl = 0.005
 
     # 强制更新优化器参数组
     for param_group in model.policy.optimizer.param_groups:
         param_group['lr'] = new_lr
 
-    # --- W&B 初始化 ---
-    run_name = f"FT_{model_filename}_{datetime.now().strftime('%m%d_%H%M')}"
+    # --- W&B 初始化 (同步更新记录) ---
+    run_name = f"FT_PRECISION_{model_base_name}_{datetime.now().strftime('%m%d_%H%M')}"
     wandb.init(
         project="Air-Simulator-FineTune",
         name=run_name,
         config={
-            "learning_rate": model.learning_rate,
+            "learning_rate": new_lr,
             "ent_coef": model.ent_coef,
-            "clip_range": 0.1, # 记录数值即可
-            "target_kl": model.target_kl, # 记录 target_kl
+            "gae_lambda": model.gae_lambda,  # 记录新增的核心改动
+            "clip_range": 0.10,
+            "target_kl": model.target_kl,
             "base_model": model_filename,
-            "episodes": args.episodes,
-            "port": args.port
+            "notes": "Focus on eliminating residual collisions by lowering GAE lambda and entropy"
         },
         sync_tensorboard=True,
         monitor_gym=True,
