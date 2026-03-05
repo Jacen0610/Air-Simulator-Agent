@@ -31,7 +31,7 @@ def main():
     parser.add_argument('--model_name', type=str, default='tea_ppo_final', help='模型文件名 (不带.zip)')
 
     args = parser.parse_args()
-    grpc_address = f'localhost:{args.grpc_port}'
+    grpc_address = f'127.0.0.1:{args.grpc_port}'
 
     # --- 拼接完整路径 ---
     MODEL_PATH = os.path.join(default_model_dir, f"{args.model_name}.zip")
