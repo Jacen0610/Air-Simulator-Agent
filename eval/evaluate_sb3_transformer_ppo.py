@@ -77,7 +77,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 10
+    EVAL_EPISODES = 20
     SEQUENCE_LENGTH = 96 # 必须与训练脚本 train_sb3_attention_ppo.py 中的设置一致
     
     # --- 使用基于项目根目录的绝对路径 ---

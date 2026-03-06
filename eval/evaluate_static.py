@@ -14,7 +14,7 @@ from env.go_simulator_env import GoSimulatorEnv
 from agent.static_agent import CSMAAgent
 
 # --- 配置 ---
-NUM_EVAL_EPISODES = 10
+NUM_EVAL_EPISODES = 20
 SEQUENCE_LENGTH = 10
 P_VALUE = 0.05
 SLOT_TIME_SECONDS = 0.0045

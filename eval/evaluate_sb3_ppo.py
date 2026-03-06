@@ -75,7 +75,7 @@ def main():
     print(f"Using gRPC server address: {grpc_address}")
 
     # --- 配置 ---
-    EVAL_EPISODES = 10
+    EVAL_EPISODES = 20
     
     # --- 使用基于项目根目录的绝对路径 ---
     MODEL_PATH = os.path.join(project_root, "SB3/models/sb3_mlp_ppo.zip")
